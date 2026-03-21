@@ -1,10 +1,12 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"github.com/webmafia/tumladan/internal/middleware"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/webmafia/tumladan/pkg/postgres"
@@ -22,12 +24,17 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
+	jwtSecret, err := getRequiredEnv("JWT_SECRET")
+	if err != nil {
+		return nil, err
+	}
+
 	cfg := &Config{
 		AppEnv:    getEnv("APP_ENV", "local"),
 		HTTPHost:  getEnv("HTTP_HOST", "0.0.0.0"),
 		HTTPPort:  getEnvInt("HTTP_PORT", 8080),
 		LogLevel:  getEnv("LOG_LEVEL", "info"),
-		JWTSecret: getEnv("JWT_SECRET", "dev-secret"),
+		JWTSecret: jwtSecret,
 		JWTTTL:    getEnvDuration("JWT_TTL", 24*time.Hour),
 		Postgres: postgres.Config{
 			Host:            getEnv("DB_HOST", "postgres"),
@@ -41,10 +48,10 @@ func Load() (*Config, error) {
 			ConnMaxLifetime: getEnvDuration("DB_CONN_MAX_LIFETIME", 30*time.Minute),
 		},
 		CORS: middleware.CORSConfig{
-			AllowedOrigins: []string{
+			AllowedOrigins: getEnvCSV("CORS_ALLOWED_ORIGINS", []string{
 				"http://localhost:3000",
 				"http://localhost:5173",
-			},
+			}),
 			AllowedMethods: []string{
 				"GET", "POST", "PUT", "DELETE", "OPTIONS",
 			},
@@ -67,6 +74,37 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func getRequiredEnv(key string) (string, error) {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return "", errors.New(key + " is required")
+	}
+
+	return value, nil
+}
+
+func getEnvCSV(key string, fallback []string) []string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+
+	parts := strings.Split(value, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			result = append(result, part)
+		}
+	}
+
+	if len(result) == 0 {
+		return fallback
+	}
+
+	return result
 }
 
 func getEnvInt(key string, fallback int) int {

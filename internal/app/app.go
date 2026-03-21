@@ -63,6 +63,7 @@ func New(ctx context.Context) (*App, error) {
 	roomHandler := roomHTTP.NewHandler(roomSvc)
 
 	wsConfig := pkgws.NewDefaultConfig()
+	wsConfig.AllowedOrigins = cfg.CORS.AllowedOrigins
 	hub := pkgws.NewHub()
 	go hub.Run(ctx)
 

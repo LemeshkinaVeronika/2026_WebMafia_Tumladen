@@ -10,6 +10,7 @@ type Config struct {
 	WriteWait       time.Duration
 	PongWait        time.Duration
 	PingPeriod      time.Duration
+	AllowedOrigins  []string
 }
 
 func NewDefaultConfig() Config {
@@ -23,5 +24,6 @@ func NewDefaultConfig() Config {
 		WriteWait:       10 * time.Second,
 		PongWait:        pongWait,
 		PingPeriod:      pongWait * 9 / 10,
+		AllowedOrigins:  nil,
 	}
 }

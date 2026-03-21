@@ -154,6 +154,21 @@ func (h *MessageHandler) handleJoinRoom(ctx context.Context, client *pkgws.Clien
 		return
 	}
 
+	previousRoomID := client.RoomID()
+	if previousRoomID != "" && previousRoomID != p.RoomID {
+		if err := h.roomService.LeaveRoom(ctx, client.Actor(), previousRoomID); err != nil {
+			writeJSON(client, ServerMessage{
+				Type: "error",
+				Payload: ErrorPayload{
+					Message: "failed to leave previous room",
+				},
+			})
+			return
+		}
+
+		h.hub.Leave(client, previousRoomID)
+	}
+
 	roomState, err := h.roomService.JoinRoom(ctx, client.Actor(), p.RoomID)
 	if err != nil {
 		writeJSON(client, ServerMessage{

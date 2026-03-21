@@ -41,7 +41,18 @@ func (s *Service) CreateRoom(ctx context.Context, actor model.Actor, req dto.Cre
 		return nil, err
 	}
 
+	if err := s.repo.AddParticipant(ctx, room.ID, actor.ID, actor.DisplayName); err != nil {
+		return nil, err
+	}
+
 	resp := roomToResponse(*room)
+	resp.Participants = []dto.ParticipantResponse{
+		{
+			ActorID:     actor.ID,
+			DisplayName: actor.DisplayName,
+			JoinedAt:    now.Format(time.RFC3339),
+		},
+	}
 	return &resp, nil
 }
 

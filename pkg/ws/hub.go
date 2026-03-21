@@ -7,11 +7,17 @@ type Message struct {
 	Data   []byte
 }
 
+type leaveRequest struct {
+	client *Client
+	roomID string
+}
+
 type Hub struct {
 	rooms      map[string]map[*Client]bool
 	broadcast  chan Message
 	register   chan *Client
 	unregister chan *Client
+	leave      chan leaveRequest
 }
 
 func NewHub() *Hub {
@@ -19,6 +25,7 @@ func NewHub() *Hub {
 		broadcast:  make(chan Message),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
+		leave:      make(chan leaveRequest),
 		rooms:      make(map[string]map[*Client]bool),
 	}
 }
@@ -64,6 +71,18 @@ func (h *Hub) Run(ctx context.Context) {
 				}
 			}
 
+		case req := <-h.leave:
+			if req.roomID == "" {
+				continue
+			}
+
+			if clients, ok := h.rooms[req.roomID]; ok {
+				delete(clients, req.client)
+				if len(clients) == 0 {
+					delete(h.rooms, req.roomID)
+				}
+			}
+
 		case message := <-h.broadcast:
 			if clients, ok := h.rooms[message.RoomID]; ok {
 				for client := range clients {
@@ -89,6 +108,13 @@ func (h *Hub) Register(client *Client) {
 
 func (h *Hub) Unregister(client *Client) {
 	h.unregister <- client
+}
+
+func (h *Hub) Leave(client *Client, roomID string) {
+	h.leave <- leaveRequest{
+		client: client,
+		roomID: roomID,
+	}
 }
 
 func (h *Hub) BroadcastTo(roomID string, data []byte) {
