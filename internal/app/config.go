@@ -51,6 +51,7 @@ func Load() (*Config, error) {
 			AllowedOrigins: getEnvCSV("CORS_ALLOWED_ORIGINS", []string{
 				"http://localhost:3000",
 				"http://localhost:5173",
+				"http://87.239.104.134:3000",
 			}),
 			AllowedMethods: []string{
 				"GET", "POST", "PUT", "DELETE", "OPTIONS",
