@@ -18,7 +18,7 @@ import (
 	roomPostgres "github.com/webmafia/tumladan/internal/room/repository/postgres"
 	roomService "github.com/webmafia/tumladan/internal/room/service"
 	"github.com/webmafia/tumladan/internal/router"
-	"github.com/webmafia/tumladan/pkg/jwt"
+	jwtprovider "github.com/webmafia/tumladan/pkg/jwt"
 	"github.com/webmafia/tumladan/pkg/postgres"
 )
 

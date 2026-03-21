@@ -3,10 +3,9 @@ package router
 import (
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
 	guestDelivery "github.com/webmafia/tumladan/internal/guest/delivery/http"
 	roomDelivery "github.com/webmafia/tumladan/internal/room/delivery/http"
-
-	"github.com/gorilla/mux"
 )
 
 type AppHandlers struct {
@@ -14,21 +13,20 @@ type AppHandlers struct {
 	RoomHandler  *roomDelivery.Handler
 }
 
-func NewRouter(handlers AppHandlers, healthHandler http.HandlerFunc) *mux.Router {
-	r := mux.NewRouter()
+func NewRouter(handlers AppHandlers, healthHandler http.HandlerFunc) *chi.Mux {
+	r := chi.NewRouter()
 
-	r.HandleFunc("/health", healthHandler).Methods(http.MethodGet)
+	r.Get("/health", healthHandler)
 
-	api := r.PathPrefix("/api/v1").Subrouter()
-	public := api.PathPrefix("").Subrouter()
+	r.Route("/api/v1", func(api chi.Router) {
+		if handlers.GuestHandler != nil {
+			handlers.GuestHandler.RegisterRoutes(api)
+		}
 
-	if handlers.GuestHandler != nil {
-		handlers.GuestHandler.RegisterRoutes(public)
-	}
-
-	if handlers.RoomHandler != nil {
-		handlers.RoomHandler.RegisterRoutes(public)
-	}
+		if handlers.RoomHandler != nil {
+			handlers.RoomHandler.RegisterRoutes(api)
+		}
+	})
 
 	return r
 }

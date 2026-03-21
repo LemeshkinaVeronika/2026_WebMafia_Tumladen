@@ -3,9 +3,9 @@ package http
 import (
 	"net/http"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi/v5"
 )
 
-func (h *Handler) RegisterRoutes(router *mux.Router) {
-	router.HandleFunc("/guest-sessions", h.CreateGuestSession).Methods(http.MethodPost, http.MethodOptions)
+func (h *Handler) RegisterRoutes(router chi.Router) {
+	router.MethodFunc(http.MethodPost, "/guest-sessions", h.CreateGuestSession)
 }

@@ -1,4 +1,4 @@
-package auth
+package jwtprovider
 
 import (
 	"context"
@@ -12,7 +12,7 @@ type JWTProvider struct {
 	ttl    time.Duration
 }
 
-func NewJWTProvider(secret string, ttl time.Duration) *JWTProvider {
+func New(secret string, ttl time.Duration) *JWTProvider {
 	return &JWTProvider{
 		secret: []byte(secret),
 		ttl:    ttl,
