@@ -14,6 +14,7 @@ import (
 	guestHTTP "github.com/webmafia/tumladan/internal/guest/delivery/http"
 	guestPostgres "github.com/webmafia/tumladan/internal/guest/repository/postgres"
 	guestService "github.com/webmafia/tumladan/internal/guest/service"
+	"github.com/webmafia/tumladan/internal/middleware"
 	roomHTTP "github.com/webmafia/tumladan/internal/room/delivery/http"
 	roomPostgres "github.com/webmafia/tumladan/internal/room/repository/postgres"
 	roomService "github.com/webmafia/tumladan/internal/room/service"
@@ -49,6 +50,7 @@ func New(ctx context.Context) (*App, error) {
 	}
 
 	jwtProvider := jwtprovider.New(cfg.JWTSecret, cfg.JWTTTL)
+	authMiddleware := middleware.NewAuth(jwtProvider)
 
 	guestRepo := guestPostgres.New(db)
 	guestSvc := guestService.New(guestRepo, jwtProvider)
@@ -64,6 +66,7 @@ func New(ctx context.Context) (*App, error) {
 			RoomHandler:  roomHandler,
 		},
 		healthHandler(logger, db),
+		authMiddleware,
 	)
 
 	server := &http.Server{

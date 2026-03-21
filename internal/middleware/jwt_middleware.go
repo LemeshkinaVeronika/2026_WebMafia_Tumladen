@@ -1,0 +1,60 @@
+package middleware
+
+import (
+	"context"
+	"net/http"
+	"strings"
+
+	"github.com/webmafia/tumladan/internal/model"
+	jwtprovider "github.com/webmafia/tumladan/pkg/jwt"
+)
+
+type contextKey string
+
+const actorKey contextKey = "actor"
+
+type Auth struct {
+	jwt *jwtprovider.JWTProvider
+}
+
+func NewAuth(jwt *jwtprovider.JWTProvider) *Auth {
+	return &Auth{jwt: jwt}
+}
+
+func (a *Auth) AuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := r.Header.Get("Authorization")
+		if authHeader == "" {
+			http.Error(w, "missing authorization header", http.StatusUnauthorized)
+			return
+		}
+
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			http.Error(w, "invalid authorization header", http.StatusUnauthorized)
+			return
+		}
+
+		tokenStr := parts[1]
+
+		claims, err := a.jwt.ParseToken(tokenStr)
+		if err != nil {
+			http.Error(w, "invalid token", http.StatusUnauthorized)
+			return
+		}
+
+		actor := model.Actor{
+			ID:          claims.Subject,
+			Type:        model.ActorType(claims.ActorType),
+			DisplayName: claims.DisplayName,
+		}
+
+		ctx := context.WithValue(r.Context(), actorKey, actor)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func ActorFromContext(ctx context.Context) (model.Actor, bool) {
+	actor, ok := ctx.Value(actorKey).(model.Actor)
+	return actor, ok
+}

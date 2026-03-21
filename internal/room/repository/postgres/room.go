@@ -2,19 +2,10 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 
 	"github.com/webmafia/tumladan/internal/model"
 )
-
-type Repository struct {
-	db *sql.DB
-}
-
-func New(db *sql.DB) *Repository {
-	return &Repository{db: db}
-}
 
 func (r *Repository) Create(ctx context.Context, room *model.Room) error {
 	const op = "room.repository.postgres.Create"
@@ -83,4 +74,32 @@ func (r *Repository) ListPublic(ctx context.Context) ([]model.Room, error) {
 	}
 
 	return rooms, nil
+}
+
+func (r *Repository) GetByInviteCode(ctx context.Context, inviteCode string) (*model.Room, error) {
+	const op = "room.repository.postgres.GetByInviteCode"
+
+	query := `
+		SELECT id, name, is_private, invite_code, owner_actor_id, status, created_at, updated_at
+		FROM rooms
+		WHERE invite_code = $1
+		LIMIT 1
+	`
+
+	var room model.Room
+	err := r.db.QueryRowContext(ctx, query, inviteCode).Scan(
+		&room.ID,
+		&room.Name,
+		&room.IsPrivate,
+		&room.InviteCode,
+		&room.OwnerActorID,
+		&room.Status,
+		&room.CreatedAt,
+		&room.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("[%s]: query failed: %w", op, mapErrors(err))
+	}
+
+	return &room, nil
 }

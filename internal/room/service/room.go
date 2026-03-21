@@ -2,15 +2,20 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/webmafia/tumladan/internal/model"
 	"github.com/webmafia/tumladan/internal/room/dto"
+	roomPostgres "github.com/webmafia/tumladan/internal/room/repository/postgres"
 )
 
-const defaultOwnerActorID = "00000000-0000-0000-0000-000000000000"
+const (
+	minRoomNameLength = 1
+	maxRoomNameLength = 64
+)
 
 type Service struct {
 	repo IRepository
@@ -20,18 +25,21 @@ func New(repo IRepository) *Service {
 	return &Service{repo: repo}
 }
 
-func (s *Service) CreateRoom(ctx context.Context, req dto.CreateRoomRequest) (*dto.RoomResponse, error) {
+func (s *Service) CreateRoom(ctx context.Context, actor model.Actor, req dto.CreateRoomRequest) (*dto.RoomResponse, error) {
 	name := strings.TrimSpace(req.Name)
-	if name == "" {
+	if len(name) < minRoomNameLength || len(name) > maxRoomNameLength {
 		return nil, ErrInvalidRoomName
 	}
 
 	now := time.Now().UTC()
+	inviteCode := generateInviteCode()
+
 	room := &model.Room{
 		ID:           uuid.NewString(),
 		Name:         name,
 		IsPrivate:    false,
-		OwnerActorID: defaultOwnerActorID,
+		InviteCode:   &inviteCode,
+		OwnerActorID: actor.ID,
 		Status:       model.RoomStatusWaiting,
 		CreatedAt:    now,
 		UpdatedAt:    now,
@@ -62,6 +70,27 @@ func (s *Service) ListPublicRooms(ctx context.Context) (*dto.ListPublicRoomsResp
 	return resp, nil
 }
 
+func (s *Service) GetRoomByInviteCode(ctx context.Context, inviteCode string) (*dto.GetRoomByInviteCodeResponse, error) {
+	code := strings.TrimSpace(inviteCode)
+	if code == "" {
+		return nil, ErrRoomNotFound
+	}
+
+	room, err := s.repo.GetByInviteCode(ctx, code)
+	if err != nil {
+		if errors.Is(err, roomPostgres.ErrNotFound) {
+			return nil, ErrRoomNotFound
+		}
+		return nil, err
+	}
+
+	resp := &dto.GetRoomByInviteCodeResponse{
+		Room: roomToResponse(*room),
+	}
+
+	return resp, nil
+}
+
 func roomToResponse(room model.Room) dto.RoomResponse {
 	return dto.RoomResponse{
 		ID:           room.ID,
@@ -73,4 +102,8 @@ func roomToResponse(room model.Room) dto.RoomResponse {
 		CreatedAt:    room.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:    room.UpdatedAt.Format(time.RFC3339),
 	}
+}
+
+func generateInviteCode() string {
+	return strings.ToUpper(uuid.NewString()[:8])
 }
