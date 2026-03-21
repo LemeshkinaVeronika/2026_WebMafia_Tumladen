@@ -17,14 +17,6 @@ const (
 	maxRoomNameLength = 64
 )
 
-type Service struct {
-	repo IRepository
-}
-
-func New(repo IRepository) *Service {
-	return &Service{repo: repo}
-}
-
 func (s *Service) CreateRoom(ctx context.Context, actor model.Actor, req dto.CreateRoomRequest) (*dto.RoomResponse, error) {
 	name := strings.TrimSpace(req.Name)
 	if len(name) < minRoomNameLength || len(name) > maxRoomNameLength {

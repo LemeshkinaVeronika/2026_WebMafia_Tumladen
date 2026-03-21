@@ -15,18 +15,6 @@ const (
 	maxDisplayNameLength = 32
 )
 
-type Service struct {
-	repo          IRepository
-	tokenProvider ITokenProvider
-}
-
-func New(repo IRepository, tokenProvider ITokenProvider) *Service {
-	return &Service{
-		repo:          repo,
-		tokenProvider: tokenProvider,
-	}
-}
-
 func (s *Service) CreateGuestSession(ctx context.Context, req dto.CreateGuestSessionRequest) (*dto.CreateGuestSessionResponse, error) {
 	displayName := strings.TrimSpace(req.DisplayName)
 	if len(displayName) < minDisplayNameLength || len(displayName) > maxDisplayNameLength {

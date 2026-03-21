@@ -11,3 +11,11 @@ type IRepository interface {
 	ListPublic(ctx context.Context) ([]model.Room, error)
 	GetByInviteCode(ctx context.Context, inviteCode string) (*model.Room, error)
 }
+
+type Service struct {
+	repo IRepository
+}
+
+func New(repo IRepository) *Service {
+	return &Service{repo: repo}
+}
