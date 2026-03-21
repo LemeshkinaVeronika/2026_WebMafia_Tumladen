@@ -96,6 +96,65 @@ func roomToResponse(room model.Room) dto.RoomResponse {
 	}
 }
 
+func (s *Service) JoinRoom(ctx context.Context, actor model.Actor, roomID string) (*dto.RoomResponse, error) {
+	room, err := s.repo.GetByID(ctx, roomID)
+	if err != nil {
+		if errors.Is(err, roomPostgres.ErrNotFound) {
+			return nil, ErrRoomNotFound
+		}
+		return nil, err
+	}
+
+	if err := s.repo.AddParticipant(ctx, roomID, actor.ID, actor.DisplayName); err != nil {
+		return nil, err
+	}
+
+	participants, err := s.repo.ListParticipants(ctx, roomID)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := roomWithParticipantsToResponse(*room, participants)
+	return &resp, nil
+}
+
+func (s *Service) LeaveRoom(ctx context.Context, actor model.Actor, roomID string) error {
+	return s.repo.RemoveParticipant(ctx, roomID, actor.ID)
+}
+
+func (s *Service) GetRoomState(ctx context.Context, roomID string) (*dto.RoomResponse, error) {
+	room, err := s.repo.GetByID(ctx, roomID)
+	if err != nil {
+		if errors.Is(err, roomPostgres.ErrNotFound) {
+			return nil, ErrRoomNotFound
+		}
+		return nil, err
+	}
+
+	participants, err := s.repo.ListParticipants(ctx, roomID)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := roomWithParticipantsToResponse(*room, participants)
+	return &resp, nil
+}
+
+func roomWithParticipantsToResponse(room model.Room, participants []model.RoomParticipantView) dto.RoomResponse {
+	resp := roomToResponse(room)
+	resp.Participants = make([]dto.ParticipantResponse, 0, len(participants))
+
+	for _, p := range participants {
+		resp.Participants = append(resp.Participants, dto.ParticipantResponse{
+			ActorID:     p.ActorID,
+			DisplayName: p.DisplayName,
+			JoinedAt:    p.JoinedAt.Format(time.RFC3339),
+		})
+	}
+
+	return resp
+}
+
 func generateInviteCode() string {
 	return strings.ToUpper(uuid.NewString()[:8])
 }

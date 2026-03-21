@@ -7,17 +7,23 @@ import (
 	guestDelivery "github.com/webmafia/tumladan/internal/guest/delivery/http"
 	"github.com/webmafia/tumladan/internal/middleware"
 	roomDelivery "github.com/webmafia/tumladan/internal/room/delivery/http"
+	internalws "github.com/webmafia/tumladan/internal/ws"
 )
 
 type AppHandlers struct {
 	GuestHandler *guestDelivery.Handler
 	RoomHandler  *roomDelivery.Handler
+	WSHandler    *internalws.Handler
 }
 
 func NewRouter(handlers AppHandlers, healthHandler http.HandlerFunc, auth *middleware.Auth) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Get("/health", healthHandler)
+
+	if handlers.WSHandler != nil {
+		r.Handle("/ws", handlers.WSHandler)
+	}
 
 	r.Route("/api/v1", func(api chi.Router) {
 		if handlers.GuestHandler != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	internalws "github.com/webmafia/tumladan/internal/ws"
 	"log/slog"
 	"net/http"
 	"os"
@@ -21,6 +22,7 @@ import (
 	"github.com/webmafia/tumladan/internal/router"
 	jwtprovider "github.com/webmafia/tumladan/pkg/jwt"
 	"github.com/webmafia/tumladan/pkg/postgres"
+	pkgws "github.com/webmafia/tumladan/pkg/ws"
 )
 
 type App struct {
@@ -60,10 +62,17 @@ func New(ctx context.Context) (*App, error) {
 	roomSvc := roomService.New(roomRepo)
 	roomHandler := roomHTTP.NewHandler(roomSvc)
 
+	wsConfig := pkgws.NewDefaultConfig()
+	hub := pkgws.NewHub()
+	go hub.Run(ctx)
+
+	wsHandler := internalws.NewHandler(roomSvc, jwtProvider, hub, wsConfig)
+
 	r := router.NewRouter(
 		router.AppHandlers{
 			GuestHandler: guestHandler,
 			RoomHandler:  roomHandler,
+			WSHandler:    wsHandler,
 		},
 		healthHandler(logger, db),
 		authMiddleware,

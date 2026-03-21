@@ -103,3 +103,31 @@ func (r *Repository) GetByInviteCode(ctx context.Context, inviteCode string) (*m
 
 	return &room, nil
 }
+
+func (r *Repository) GetByID(ctx context.Context, roomID string) (*model.Room, error) {
+	const op = "room.repository.postgres.GetByID"
+
+	query := `
+		SELECT id, name, is_private, invite_code, owner_actor_id, status, created_at, updated_at
+		FROM rooms
+		WHERE id = $1
+		LIMIT 1
+	`
+
+	var room model.Room
+	err := r.db.QueryRowContext(ctx, query, roomID).Scan(
+		&room.ID,
+		&room.Name,
+		&room.IsPrivate,
+		&room.InviteCode,
+		&room.OwnerActorID,
+		&room.Status,
+		&room.CreatedAt,
+		&room.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("[%s]: query failed: %w", op, mapErrors(err))
+	}
+
+	return &room, nil
+}
