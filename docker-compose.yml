@@ -1,0 +1,40 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: webmafia
+      POSTGRES_USER: webmafia
+      POSTGRES_PASSWORD: webmafia
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webmafia -d webmafia"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - tumladan_net
+
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    ports:
+      - "8080:8080"
+    networks:
+      - tumladan_net
+
+volumes:
+  postgres_data:
+
+networks:
+  tumladan_net:
+    external: true
