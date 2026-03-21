@@ -14,10 +14,13 @@ type AppHandlers struct {
 	GuestHandler *guestDelivery.Handler
 	RoomHandler  *roomDelivery.Handler
 	WSHandler    *internalws.Handler
+	cors         middleware.CORSConfig
 }
 
-func NewRouter(handlers AppHandlers, healthHandler http.HandlerFunc, auth *middleware.Auth) *chi.Mux {
+func NewRouter(handlers AppHandlers, healthHandler http.HandlerFunc, auth *middleware.Auth, cors middleware.CORSConfig) *chi.Mux {
 	r := chi.NewRouter()
+
+	r.Use(middleware.CORS(cors))
 
 	r.Get("/health", healthHandler)
 

@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"github.com/webmafia/tumladan/internal/middleware"
 	"os"
 	"strconv"
 	"time"
@@ -17,6 +18,7 @@ type Config struct {
 	JWTSecret string
 	JWTTTL    time.Duration
 	Postgres  postgres.Config
+	CORS      middleware.CORSConfig
 }
 
 func Load() (*Config, error) {
@@ -37,6 +39,19 @@ func Load() (*Config, error) {
 			MaxOpenConns:    getEnvInt("DB_MAX_OPEN_CONNS", 10),
 			MaxIdleConns:    getEnvInt("DB_MAX_IDLE_CONNS", 5),
 			ConnMaxLifetime: getEnvDuration("DB_CONN_MAX_LIFETIME", 30*time.Minute),
+		},
+		CORS: middleware.CORSConfig{
+			AllowedOrigins: []string{
+				"http://localhost:3000",
+				"http://localhost:5173",
+			},
+			AllowedMethods: []string{
+				"GET", "POST", "PUT", "DELETE", "OPTIONS",
+			},
+			AllowedHeaders: []string{
+				"Content-Type", "Authorization",
+			},
+			AllowCredentials: false,
 		},
 	}
 

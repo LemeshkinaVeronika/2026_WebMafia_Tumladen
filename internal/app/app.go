@@ -76,6 +76,7 @@ func New(ctx context.Context) (*App, error) {
 		},
 		healthHandler(logger, db),
 		authMiddleware,
+		cfg.CORS,
 	)
 
 	server := &http.Server{
