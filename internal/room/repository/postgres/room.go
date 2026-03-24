@@ -11,8 +11,10 @@ func (r *Repository) Create(ctx context.Context, room *model.Room) error {
 	const op = "room.repository.postgres.Create"
 
 	query := `
-		INSERT INTO rooms (id, name, is_private, invite_code, owner_actor_id, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO rooms (
+			id, name, is_private, invite_code, owner_actor_id, status, game_type, max_players, created_at, updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 
 	_, err := r.db.ExecContext(
@@ -24,6 +26,8 @@ func (r *Repository) Create(ctx context.Context, room *model.Room) error {
 		room.InviteCode,
 		room.OwnerActorID,
 		room.Status,
+		room.GameType,
+		room.MaxPlayers,
 		room.CreatedAt,
 		room.UpdatedAt,
 	)
@@ -38,7 +42,7 @@ func (r *Repository) ListPublic(ctx context.Context) ([]model.Room, error) {
 	const op = "room.repository.postgres.ListPublic"
 
 	query := `
-		SELECT id, name, is_private, invite_code, owner_actor_id, status, created_at, updated_at
+		SELECT id, name, is_private, invite_code, owner_actor_id, status, game_type, max_players, created_at, updated_at
 		FROM rooms
 		WHERE is_private = FALSE
 		ORDER BY created_at DESC
@@ -60,6 +64,8 @@ func (r *Repository) ListPublic(ctx context.Context) ([]model.Room, error) {
 			&room.InviteCode,
 			&room.OwnerActorID,
 			&room.Status,
+			&room.GameType,
+			&room.MaxPlayers,
 			&room.CreatedAt,
 			&room.UpdatedAt,
 		); err != nil {
@@ -80,7 +86,7 @@ func (r *Repository) GetByInviteCode(ctx context.Context, inviteCode string) (*m
 	const op = "room.repository.postgres.GetByInviteCode"
 
 	query := `
-		SELECT id, name, is_private, invite_code, owner_actor_id, status, created_at, updated_at
+		SELECT id, name, is_private, invite_code, owner_actor_id, status, game_type, max_players, created_at, updated_at
 		FROM rooms
 		WHERE invite_code = $1
 		LIMIT 1
@@ -94,6 +100,8 @@ func (r *Repository) GetByInviteCode(ctx context.Context, inviteCode string) (*m
 		&room.InviteCode,
 		&room.OwnerActorID,
 		&room.Status,
+		&room.GameType,
+		&room.MaxPlayers,
 		&room.CreatedAt,
 		&room.UpdatedAt,
 	)
@@ -108,7 +116,7 @@ func (r *Repository) GetByID(ctx context.Context, roomID string) (*model.Room, e
 	const op = "room.repository.postgres.GetByID"
 
 	query := `
-		SELECT id, name, is_private, invite_code, owner_actor_id, status, created_at, updated_at
+		SELECT id, name, is_private, invite_code, owner_actor_id, status, game_type, max_players, created_at, updated_at
 		FROM rooms
 		WHERE id = $1
 		LIMIT 1
@@ -122,6 +130,8 @@ func (r *Repository) GetByID(ctx context.Context, roomID string) (*model.Room, e
 		&room.InviteCode,
 		&room.OwnerActorID,
 		&room.Status,
+		&room.GameType,
+		&room.MaxPlayers,
 		&room.CreatedAt,
 		&room.UpdatedAt,
 	)
@@ -130,4 +140,59 @@ func (r *Repository) GetByID(ctx context.Context, roomID string) (*model.Room, e
 	}
 
 	return &room, nil
+}
+
+func (r *Repository) UpdateSettings(ctx context.Context, roomID, gameType string, maxPlayers int) error {
+	const op = "room.repository.postgres.UpdateSettings"
+
+	query := `
+		UPDATE rooms
+		SET game_type = $2,
+		    max_players = $3,
+		    updated_at = NOW()
+		WHERE id = $1
+	`
+
+	result, err := r.db.ExecContext(ctx, query, roomID, gameType, maxPlayers)
+	if err != nil {
+		return fmt.Errorf("[%s]: exec failed: %w", op, err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("[%s]: rows affected failed: %w", op, err)
+	}
+
+	if rowsAffected == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+func (r *Repository) UpdateStatus(ctx context.Context, roomID string, status model.RoomStatus) error {
+	const op = "room.repository.postgres.UpdateStatus"
+
+	query := `
+		UPDATE rooms
+		SET status = $2,
+		    updated_at = NOW()
+		WHERE id = $1
+	`
+
+	result, err := r.db.ExecContext(ctx, query, roomID, status)
+	if err != nil {
+		return fmt.Errorf("[%s]: exec failed: %w", op, err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("[%s]: rows affected failed: %w", op, err)
+	}
+
+	if rowsAffected == 0 {
+		return ErrNotFound
+	}
+
+	return nil
 }

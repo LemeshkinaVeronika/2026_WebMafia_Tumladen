@@ -17,6 +17,8 @@ type Room struct {
 	InviteCode   *string
 	OwnerActorID string
 	Status       RoomStatus
+	GameType     string
+	MaxPlayers   int
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }

@@ -4,6 +4,11 @@ type CreateRoomRequest struct {
 	Name string `json:"name"`
 }
 
+type UpdateRoomSettingsRequest struct {
+	GameType   string `json:"gameType"`
+	MaxPlayers int    `json:"maxPlayers"`
+}
+
 type RoomResponse struct {
 	ID           string                `json:"id"`
 	Name         string                `json:"name"`
@@ -11,6 +16,10 @@ type RoomResponse struct {
 	InviteCode   *string               `json:"inviteCode,omitempty"`
 	OwnerActorID string                `json:"ownerActorId"`
 	Status       string                `json:"status"`
+	GameType     string                `json:"gameType"`
+	MaxPlayers   int                   `json:"maxPlayers"`
+	CanStart     bool                  `json:"canStart"`
+	PlayersCount int                   `json:"playersCount"`
 	Participants []ParticipantResponse `json:"participants,omitempty"`
 	CreatedAt    string                `json:"createdAt"`
 	UpdatedAt    string                `json:"updatedAt"`

@@ -3,6 +3,11 @@ package service
 import "errors"
 
 var (
-	ErrInvalidRoomName = errors.New("invalid room name")
-	ErrRoomNotFound    = errors.New("room not found")
+	ErrInvalidRoomName   = errors.New("invalid room name")
+	ErrRoomNotFound      = errors.New("room not found")
+	ErrForbidden         = errors.New("forbidden")
+	ErrInvalidGameType   = errors.New("invalid game type")
+	ErrInvalidMaxPlayers = errors.New("invalid max players")
+	ErrNotEnoughPlayers  = errors.New("not enough players")
+	ErrRoomNotReady      = errors.New("room is not ready to start")
 )

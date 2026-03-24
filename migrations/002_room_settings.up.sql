@@ -1,0 +1,4 @@
+ALTER TABLE rooms
+    ADD COLUMN IF NOT EXISTS game_type TEXT NOT NULL DEFAULT 'carcassonne',
+    ADD COLUMN IF NOT EXISTS max_players INT NOT NULL DEFAULT 2;
+

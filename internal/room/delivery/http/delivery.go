@@ -15,6 +15,9 @@ type IService interface {
 	JoinRoom(ctx context.Context, actor model.Actor, roomID string) (*dto.RoomResponse, error)
 	LeaveRoom(ctx context.Context, actor model.Actor, roomID string) error
 	GetRoomState(ctx context.Context, roomID string) (*dto.RoomResponse, error)
+
+	UpdateRoomSettings(ctx context.Context, actor model.Actor, roomID string, req dto.UpdateRoomSettingsRequest) (*dto.RoomResponse, error)
+	StartRoom(ctx context.Context, actorID, roomID string) (*dto.RoomResponse, error)
 }
 
 type Handler struct {

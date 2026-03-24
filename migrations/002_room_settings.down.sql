@@ -1,0 +1,3 @@
+ALTER TABLE rooms
+DROP COLUMN IF EXISTS max_players,
+    DROP COLUMN IF EXISTS game_type;

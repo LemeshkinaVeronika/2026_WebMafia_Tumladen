@@ -9,6 +9,7 @@ import (
 	"github.com/webmafia/tumladan/internal/guest/service"
 )
 
+// TODO: add pkg/response + logger
 func (h *Handler) CreateGuestSession(w http.ResponseWriter, r *http.Request) {
 	const op = "guest.delivery.http.CreateGuestSession"
 

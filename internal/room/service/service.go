@@ -15,6 +15,9 @@ type IRepository interface {
 	AddParticipant(ctx context.Context, roomID, actorID, displayName string) error
 	RemoveParticipant(ctx context.Context, roomID, actorID string) error
 	ListParticipants(ctx context.Context, roomID string) ([]model.RoomParticipantView, error)
+
+	UpdateSettings(ctx context.Context, roomID, gameType string, maxPlayers int) error
+	UpdateStatus(ctx context.Context, roomID string, status model.RoomStatus) error
 }
 
 type Service struct {
