@@ -5,6 +5,7 @@ import "errors"
 var (
 	ErrInvalidRoomName   = errors.New("invalid room name")
 	ErrRoomNotFound      = errors.New("room not found")
+	ErrRoomFull          = errors.New("room is full")
 	ErrForbidden         = errors.New("forbidden")
 	ErrInvalidGameType   = errors.New("invalid game type")
 	ErrInvalidMaxPlayers = errors.New("invalid max players")

@@ -43,8 +43,17 @@ func (a *Auth) AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
+		actorID := claims.ActorID
+		if actorID == "" {
+			actorID = claims.RegisteredClaims.Subject
+		}
+		if actorID == "" {
+			http.Error(w, "invalid token", http.StatusUnauthorized)
+			return
+		}
+
 		actor := model.Actor{
-			ID:          claims.Subject,
+			ID:          actorID,
 			Type:        model.ActorType(claims.ActorType),
 			DisplayName: claims.DisplayName,
 		}

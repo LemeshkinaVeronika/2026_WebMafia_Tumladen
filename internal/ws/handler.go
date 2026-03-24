@@ -3,6 +3,7 @@ package ws
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	roomDTO "github.com/webmafia/tumladan/internal/room/dto"
 	"net/http"
 
@@ -54,8 +55,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	actorID := claims.ActorID
+	if actorID == "" {
+		actorID = claims.RegisteredClaims.Subject
+	}
+	if actorID == "" {
+		http.Error(w, "invalid token", http.StatusUnauthorized)
+		return
+	}
+
 	actor := model.Actor{
-		ID:          claims.Subject,
+		ID:          actorID,
 		Type:        model.ActorType(claims.ActorType),
 		DisplayName: claims.DisplayName,
 	}
@@ -171,10 +181,15 @@ func (h *MessageHandler) handleJoinRoom(ctx context.Context, client *pkgws.Clien
 
 	roomState, err := h.roomService.JoinRoom(ctx, client.Actor(), p.RoomID)
 	if err != nil {
+		message := "failed to join room"
+		if errors.Is(err, roomService.ErrRoomFull) {
+			message = "room is full"
+		}
+
 		writeJSON(client, ServerMessage{
 			Type: "error",
 			Payload: ErrorPayload{
-				Message: "failed to join room",
+				Message: message,
 			},
 		})
 		return

@@ -83,20 +83,7 @@ func (s *Service) CreateRoom(ctx context.Context, actor model.Actor, req dto.Cre
 		return nil, err
 	}
 
-	if err := s.repo.AddParticipant(ctx, room.ID, actor.ID, actor.DisplayName); err != nil {
-		return nil, err
-	}
-
-	participants := []model.RoomParticipantView{
-		{
-			RoomID:      room.ID,
-			ActorID:     actor.ID,
-			DisplayName: actor.DisplayName,
-			JoinedAt:    now,
-		},
-	}
-
-	resp := roomWithParticipantsToResponse(*room, participants)
+	resp := roomWithParticipantsToResponse(*room, nil)
 	return &resp, nil
 }
 
@@ -157,11 +144,27 @@ func (s *Service) JoinRoom(ctx context.Context, actor model.Actor, roomID string
 		return nil, err
 	}
 
+	participants, err := s.repo.ListParticipants(ctx, roomID)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, participant := range participants {
+		if participant.ActorID == actor.ID {
+			resp := roomWithParticipantsToResponse(*room, participants)
+			return &resp, nil
+		}
+	}
+
+	if len(participants) >= room.MaxPlayers {
+		return nil, ErrRoomFull
+	}
+
 	if err := s.repo.AddParticipant(ctx, roomID, actor.ID, actor.DisplayName); err != nil {
 		return nil, err
 	}
 
-	participants, err := s.repo.ListParticipants(ctx, roomID)
+	participants, err = s.repo.ListParticipants(ctx, roomID)
 	if err != nil {
 		return nil, err
 	}
