@@ -47,6 +47,9 @@ func roomWithParticipantsToResponse(room model.Room, participants []model.RoomPa
 		})
 	}
 
+	resp.PlayersCount = len(participants)
+	resp.CanStart = room.Status == model.RoomStatusWaiting && len(participants) >= 2
+
 	return resp
 }
 
@@ -80,14 +83,16 @@ func (s *Service) CreateRoom(ctx context.Context, actor model.Actor, req dto.Cre
 		return nil, err
 	}
 
-	resp := roomToResponse(*room)
-	resp.Participants = []dto.ParticipantResponse{
+	participants := []model.RoomParticipantView{
 		{
+			RoomID:      room.ID,
 			ActorID:     actor.ID,
 			DisplayName: actor.DisplayName,
-			JoinedAt:    now.Format(time.RFC3339),
+			JoinedAt:    now,
 		},
 	}
+
+	resp := roomWithParticipantsToResponse(*room, participants)
 	return &resp, nil
 }
 
@@ -122,8 +127,13 @@ func (s *Service) GetRoomByInviteCode(ctx context.Context, inviteCode string) (*
 		return nil, err
 	}
 
+	participants, err := s.repo.ListParticipants(ctx, room.ID)
+	if err != nil {
+		return nil, err
+	}
+
 	resp := &dto.GetRoomByInviteCodeResponse{
-		Room: roomToResponse(*room),
+		Room: roomWithParticipantsToResponse(*room, participants),
 	}
 
 	return resp, nil
