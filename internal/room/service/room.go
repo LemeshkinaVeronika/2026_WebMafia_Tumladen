@@ -35,8 +35,15 @@ func roomToResponse(room model.Room) dto.RoomResponse {
 	}
 }
 
-func roomWithParticipantsToResponse(room model.Room, participants []model.RoomParticipantView) dto.RoomResponse {
+func roomWithPlayerStatsToResponse(room model.Room, participants []model.RoomParticipantView) dto.RoomResponse {
 	resp := roomToResponse(room)
+	resp.PlayersCount = len(participants)
+	resp.CanStart = room.Status == model.RoomStatusWaiting && len(participants) >= 2
+	return resp
+}
+
+func roomWithParticipantsToResponse(room model.Room, participants []model.RoomParticipantView) dto.RoomResponse {
+	resp := roomWithPlayerStatsToResponse(room, participants)
 	resp.Participants = make([]dto.ParticipantResponse, 0, len(participants))
 
 	for _, p := range participants {
@@ -46,9 +53,6 @@ func roomWithParticipantsToResponse(room model.Room, participants []model.RoomPa
 			JoinedAt:    p.JoinedAt.Format(time.RFC3339),
 		})
 	}
-
-	resp.PlayersCount = len(participants)
-	resp.CanStart = room.Status == model.RoomStatusWaiting && len(participants) >= 2
 
 	return resp
 }
@@ -107,7 +111,12 @@ func (s *Service) ListPublicRooms(ctx context.Context) (*dto.ListPublicRoomsResp
 	}
 
 	for _, room := range rooms {
-		resp.Rooms = append(resp.Rooms, roomToResponse(room))
+		participants, err := s.repo.ListParticipants(ctx, room.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		resp.Rooms = append(resp.Rooms, roomWithPlayerStatsToResponse(room, participants))
 	}
 
 	return resp, nil

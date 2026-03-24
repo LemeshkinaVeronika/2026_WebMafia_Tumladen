@@ -14,7 +14,6 @@ type JWTProvider struct {
 }
 
 type Claims struct {
-	Subject     string `json:"sub"`
 	ActorType   string `json:"actor_type"`
 	DisplayName string `json:"displayName"`
 	jwt.RegisteredClaims
@@ -30,12 +29,14 @@ func New(secret string, ttl time.Duration) *JWTProvider {
 func (p *JWTProvider) CreateGuestToken(_ context.Context, actorID, displayName string) (string, error) {
 	now := time.Now()
 
-	claims := jwt.MapClaims{
-		"sub":         actorID,
-		"actor_type":  "guest",
-		"displayName": displayName,
-		"iat":         now.Unix(),
-		"exp":         now.Add(p.ttl).Unix(),
+	claims := &Claims{
+		ActorType:   "guest",
+		DisplayName: displayName,
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   actorID,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(p.ttl)),
+		},
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
