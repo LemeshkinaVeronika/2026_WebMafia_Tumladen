@@ -11,6 +11,16 @@ type JoinRoomPayload struct {
 	RoomID string `json:"roomId"`
 }
 
+type UpdateRoomSettingsPayload struct {
+	RoomID     string `json:"roomId"`
+	GameType   string `json:"gameType"`
+	MaxPlayers int    `json:"maxPlayers"`
+}
+
+type StartRoomPayload struct {
+	RoomID string `json:"roomId"`
+}
+
 type ServerMessage struct {
 	Type    string `json:"type"`
 	Payload any    `json:"payload"`

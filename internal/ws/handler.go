@@ -3,6 +3,7 @@ package ws
 import (
 	"context"
 	"encoding/json"
+	roomDTO "github.com/webmafia/tumladan/internal/room/dto"
 	"net/http"
 
 	"github.com/gorilla/websocket"
@@ -97,6 +98,13 @@ func (h *MessageHandler) HandleMessage(ctx context.Context, client *pkgws.Client
 	switch msg.Type {
 	case "join_room":
 		h.handleJoinRoom(ctx, client, msg.Payload)
+
+	case "update_room_settings":
+		h.handleUpdateRoomSettings(ctx, client, msg.Payload)
+
+	case "start_room":
+		h.handleStartRoom(ctx, client, msg.Payload)
+
 	default:
 		writeJSON(client, ServerMessage{
 			Type: "error",
@@ -120,15 +128,7 @@ func (h *MessageHandler) OnDisconnect(ctx context.Context, client *pkgws.Client)
 		return
 	}
 
-	msg, err := json.Marshal(ServerMessage{
-		Type:    "room_state",
-		Payload: roomState,
-	})
-	if err != nil {
-		return
-	}
-
-	h.hub.BroadcastTo(roomID, msg)
+	h.broadcastRoomState(roomID, roomState)
 }
 
 func (h *MessageHandler) handleJoinRoom(ctx context.Context, client *pkgws.Client, payload any) {
@@ -183,21 +183,7 @@ func (h *MessageHandler) handleJoinRoom(ctx context.Context, client *pkgws.Clien
 	client.SetRoomID(p.RoomID)
 	h.hub.Register(client)
 
-	msg, err := json.Marshal(ServerMessage{
-		Type:    "room_state",
-		Payload: roomState,
-	})
-	if err != nil {
-		writeJSON(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: "failed to encode room state",
-			},
-		})
-		return
-	}
-
-	h.hub.BroadcastTo(p.RoomID, msg)
+	h.broadcastRoomState(p.RoomID, roomState)
 }
 
 func writeJSON(client *pkgws.Client, msg ServerMessage) {
@@ -206,4 +192,98 @@ func writeJSON(client *pkgws.Client, msg ServerMessage) {
 		return
 	}
 	client.SendMessage(data)
+}
+
+func (h *MessageHandler) handleUpdateRoomSettings(ctx context.Context, client *pkgws.Client, payload any) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		writeJSON(client, ServerMessage{
+			Type: "error",
+			Payload: ErrorPayload{
+				Message: "invalid payload",
+			},
+		})
+		return
+	}
+
+	var p UpdateRoomSettingsPayload
+	if err := json.Unmarshal(raw, &p); err != nil || p.RoomID == "" {
+		writeJSON(client, ServerMessage{
+			Type: "error",
+			Payload: ErrorPayload{
+				Message: "invalid room settings payload",
+			},
+		})
+		return
+	}
+
+	roomState, err := h.roomService.UpdateRoomSettings(
+		ctx,
+		client.Actor(),
+		p.RoomID,
+		roomDTO.UpdateRoomSettingsRequest{
+			GameType:   p.GameType,
+			MaxPlayers: p.MaxPlayers,
+		},
+	)
+	if err != nil {
+		writeJSON(client, ServerMessage{
+			Type: "error",
+			Payload: ErrorPayload{
+				Message: "failed to update room settings",
+			},
+		})
+		return
+	}
+
+	h.broadcastRoomState(p.RoomID, roomState)
+}
+
+func (h *MessageHandler) handleStartRoom(ctx context.Context, client *pkgws.Client, payload any) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		writeJSON(client, ServerMessage{
+			Type: "error",
+			Payload: ErrorPayload{
+				Message: "invalid payload",
+			},
+		})
+		return
+	}
+
+	var p StartRoomPayload
+	if err := json.Unmarshal(raw, &p); err != nil || p.RoomID == "" {
+		writeJSON(client, ServerMessage{
+			Type: "error",
+			Payload: ErrorPayload{
+				Message: "invalid start room payload",
+			},
+		})
+		return
+	}
+
+	roomState, err := h.roomService.StartRoom(ctx, client.ActorID(), p.RoomID)
+	if err != nil {
+		writeJSON(client, ServerMessage{
+			Type: "error",
+			Payload: ErrorPayload{
+				Message: "failed to start room",
+			},
+		})
+		return
+	}
+
+	h.broadcastRoomState(p.RoomID, roomState)
+}
+
+func (h *MessageHandler) broadcastRoomState(roomID string, roomState any) {
+	msg, err := json.Marshal(ServerMessage{
+		Type:    "room_state",
+		Payload: roomState,
+	})
+	if err != nil {
+		return
+	}
+
+	h.hub.BroadcastTo(roomID, msg)
 }
