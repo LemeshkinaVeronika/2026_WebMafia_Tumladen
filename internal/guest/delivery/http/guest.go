@@ -7,9 +7,11 @@ import (
 
 	guestDTO "github.com/webmafia/tumladan/internal/guest/dto"
 	"github.com/webmafia/tumladan/internal/guest/service"
+	"github.com/webmafia/tumladan/internal/middleware"
 )
 
-// TODO: add pkg/response + logger
+//TODO:pkg response
+
 func (h *Handler) CreateGuestSession(w http.ResponseWriter, r *http.Request) {
 	const op = "guest.delivery.http.CreateGuestSession"
 
@@ -32,7 +34,7 @@ func (h *Handler) CreateGuestSession(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(resp)
-
-	_ = op
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		middleware.LoggerFromContext(r.Context()).Errorf("[%s]: encode response failed: %v", op, err)
+	}
 }

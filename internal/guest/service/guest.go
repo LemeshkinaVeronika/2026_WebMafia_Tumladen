@@ -15,6 +15,8 @@ const (
 	maxDisplayNameLength = 32
 )
 
+//TODO: add ErrorOf + mapping
+
 func (s *Service) CreateGuestSession(ctx context.Context, req dto.CreateGuestSessionRequest) (*dto.CreateGuestSessionResponse, error) {
 	displayName := strings.TrimSpace(req.DisplayName)
 	if len(displayName) < minDisplayNameLength || len(displayName) > maxDisplayNameLength {

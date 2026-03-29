@@ -11,9 +11,9 @@ import (
 	"github.com/webmafia/tumladan/internal/room/service"
 )
 
-//TODO: add pkg/response + logger
-
 func (h *Handler) CreateRoom(w http.ResponseWriter, r *http.Request) {
+	const op = "room.delivery.http.CreateRoom"
+
 	actor, ok := middleware.ActorFromContext(r.Context())
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -49,10 +49,14 @@ func (h *Handler) CreateRoom(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		middleware.LoggerFromContext(r.Context()).Errorf("[%s]: encode response failed: %v", op, err)
+	}
 }
 
 func (h *Handler) ListPublicRooms(w http.ResponseWriter, r *http.Request) {
+	const op = "room.delivery.http.ListPublicRooms"
+
 	resp, err := h.service.ListPublicRooms(r.Context())
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
@@ -61,10 +65,14 @@ func (h *Handler) ListPublicRooms(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		middleware.LoggerFromContext(r.Context()).Errorf("[%s]: encode response failed: %v", op, err)
+	}
 }
 
 func (h *Handler) GetRoomByInviteCode(w http.ResponseWriter, r *http.Request) {
+	const op = "room.delivery.http.GetRoomByInviteCode"
+
 	code := chi.URLParam(r, "code")
 	if code == "" {
 		http.Error(w, "invite code is required", http.StatusBadRequest)
@@ -84,10 +92,14 @@ func (h *Handler) GetRoomByInviteCode(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		middleware.LoggerFromContext(r.Context()).Errorf("[%s]: encode response failed: %v", op, err)
+	}
 }
 
 func (h *Handler) UpdateRoomSettings(w http.ResponseWriter, r *http.Request) {
+	const op = "room.delivery.http.UpdateRoomSettings"
+
 	actor, ok := middleware.ActorFromContext(r.Context())
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -132,10 +144,14 @@ func (h *Handler) UpdateRoomSettings(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		middleware.LoggerFromContext(r.Context()).Errorf("[%s]: encode response failed: %v", op, err)
+	}
 }
 
 func (h *Handler) StartRoom(w http.ResponseWriter, r *http.Request) {
+	const op = "room.delivery.http.StartRoom"
+
 	actor, ok := middleware.ActorFromContext(r.Context())
 	if !ok {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -169,5 +185,7 @@ func (h *Handler) StartRoom(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		middleware.LoggerFromContext(r.Context()).Errorf("[%s]: encode response failed: %v", op, err)
+	}
 }

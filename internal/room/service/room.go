@@ -20,6 +20,8 @@ const (
 	defaultMaxPlayers = 2
 )
 
+//TODO: add ErrorOf + mapping
+
 func roomToResponse(room model.Room) dto.RoomResponse {
 	return dto.RoomResponse{
 		ID:           room.ID,
