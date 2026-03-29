@@ -57,7 +57,7 @@ func roomWithParticipantsToResponse(room model.Room, participants []model.RoomPa
 	return resp
 }
 
-func (s *Service) CreateRoom(ctx context.Context, actor model.Actor, req dto.CreateRoomRequest) (*dto.RoomResponse, error) {
+func (s *Service) CreateRoom(ctx context.Context, req dto.CreateRoomServiceRequest) (*dto.RoomResponse, error) {
 	name := strings.TrimSpace(req.Name)
 	if len(name) < minRoomNameLength || len(name) > maxRoomNameLength {
 		return nil, ErrInvalidRoomName
@@ -71,7 +71,7 @@ func (s *Service) CreateRoom(ctx context.Context, actor model.Actor, req dto.Cre
 		Name:         name,
 		IsPrivate:    false,
 		InviteCode:   &inviteCode,
-		OwnerActorID: actor.ID,
+		OwnerActorID: req.Actor.ID,
 		Status:       model.RoomStatusWaiting,
 		GameType:     defaultGameType,
 		MaxPlayers:   defaultMaxPlayers,
@@ -135,8 +135,8 @@ func (s *Service) GetRoomByInviteCode(ctx context.Context, inviteCode string) (*
 	return resp, nil
 }
 
-func (s *Service) JoinRoom(ctx context.Context, actor model.Actor, roomID string) (*dto.RoomResponse, error) {
-	room, err := s.repo.GetByID(ctx, roomID)
+func (s *Service) JoinRoom(ctx context.Context, req dto.JoinRoomRequest) (*dto.RoomResponse, error) {
+	room, err := s.repo.GetByID(ctx, req.RoomID)
 	if err != nil {
 		if errors.Is(err, roomPostgres.ErrNotFound) {
 			return nil, ErrRoomNotFound
@@ -144,13 +144,13 @@ func (s *Service) JoinRoom(ctx context.Context, actor model.Actor, roomID string
 		return nil, err
 	}
 
-	participants, err := s.repo.ListParticipants(ctx, roomID)
+	participants, err := s.repo.ListParticipants(ctx, req.RoomID)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, participant := range participants {
-		if participant.ActorID == actor.ID {
+		if participant.ActorID == req.Actor.ID {
 			resp := roomWithParticipantsToResponse(*room, participants)
 			return &resp, nil
 		}
@@ -160,11 +160,11 @@ func (s *Service) JoinRoom(ctx context.Context, actor model.Actor, roomID string
 		return nil, ErrRoomFull
 	}
 
-	if err := s.repo.AddParticipant(ctx, roomID, actor.ID, actor.DisplayName); err != nil {
+	if err := s.repo.AddParticipant(ctx, req.RoomID, req.Actor.ID, req.Actor.DisplayName); err != nil {
 		return nil, err
 	}
 
-	participants, err = s.repo.ListParticipants(ctx, roomID)
+	participants, err = s.repo.ListParticipants(ctx, req.RoomID)
 	if err != nil {
 		return nil, err
 	}
@@ -173,8 +173,8 @@ func (s *Service) JoinRoom(ctx context.Context, actor model.Actor, roomID string
 	return &resp, nil
 }
 
-func (s *Service) LeaveRoom(ctx context.Context, actor model.Actor, roomID string) error {
-	return s.repo.RemoveParticipant(ctx, roomID, actor.ID)
+func (s *Service) LeaveRoom(ctx context.Context, req dto.LeaveRoomRequest) error {
+	return s.repo.RemoveParticipant(ctx, req.RoomID, req.ActorID)
 }
 
 func (s *Service) GetRoomState(ctx context.Context, roomID string) (*dto.RoomResponse, error) {
@@ -195,8 +195,8 @@ func (s *Service) GetRoomState(ctx context.Context, roomID string) (*dto.RoomRes
 	return &resp, nil
 }
 
-func (s *Service) UpdateRoomSettings(ctx context.Context, actor model.Actor, roomID string, req dto.UpdateRoomSettingsRequest) (*dto.RoomResponse, error) {
-	room, err := s.repo.GetByID(ctx, roomID)
+func (s *Service) UpdateRoomSettings(ctx context.Context, req dto.UpdateRoomSettingsServiceRequest) (*dto.RoomResponse, error) {
+	room, err := s.repo.GetByID(ctx, req.RoomID)
 	if err != nil {
 		if errors.Is(err, roomPostgres.ErrNotFound) {
 			return nil, ErrRoomNotFound
@@ -204,7 +204,7 @@ func (s *Service) UpdateRoomSettings(ctx context.Context, actor model.Actor, roo
 		return nil, err
 	}
 
-	if room.OwnerActorID != actor.ID {
+	if room.OwnerActorID != req.ActorID {
 		return nil, ErrForbidden
 	}
 
@@ -227,7 +227,7 @@ func (s *Service) UpdateRoomSettings(ctx context.Context, actor model.Actor, roo
 		return nil, ErrInvalidGameType
 	}
 
-	if err := s.repo.UpdateSettings(ctx, roomID, gameType, maxPlayers); err != nil {
+	if err := s.repo.UpdateSettings(ctx, req.RoomID, gameType, maxPlayers); err != nil {
 		return nil, err
 	}
 
@@ -235,7 +235,7 @@ func (s *Service) UpdateRoomSettings(ctx context.Context, actor model.Actor, roo
 	room.MaxPlayers = maxPlayers
 	room.UpdatedAt = time.Now().UTC()
 
-	participants, err := s.repo.ListParticipants(ctx, roomID)
+	participants, err := s.repo.ListParticipants(ctx, req.RoomID)
 	if err != nil {
 		return nil, err
 	}
@@ -244,8 +244,8 @@ func (s *Service) UpdateRoomSettings(ctx context.Context, actor model.Actor, roo
 	return &resp, nil
 }
 
-func (s *Service) StartRoom(ctx context.Context, actorID, roomID string) (*dto.RoomResponse, error) {
-	room, err := s.repo.GetByID(ctx, roomID)
+func (s *Service) StartRoom(ctx context.Context, req dto.StartRoomRequest) (*dto.RoomResponse, error) {
+	room, err := s.repo.GetByID(ctx, req.RoomID)
 	if err != nil {
 		if errors.Is(err, roomPostgres.ErrNotFound) {
 			return nil, ErrRoomNotFound
@@ -253,7 +253,7 @@ func (s *Service) StartRoom(ctx context.Context, actorID, roomID string) (*dto.R
 		return nil, err
 	}
 
-	if room.OwnerActorID != actorID {
+	if room.OwnerActorID != req.ActorID {
 		return nil, ErrForbidden
 	}
 
@@ -261,7 +261,7 @@ func (s *Service) StartRoom(ctx context.Context, actorID, roomID string) (*dto.R
 		return nil, ErrRoomNotReady
 	}
 
-	participants, err := s.repo.ListParticipants(ctx, roomID)
+	participants, err := s.repo.ListParticipants(ctx, req.RoomID)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +270,7 @@ func (s *Service) StartRoom(ctx context.Context, actorID, roomID string) (*dto.R
 		return nil, ErrNotEnoughPlayers
 	}
 
-	if err := s.repo.UpdateStatus(ctx, roomID, model.RoomStatusPlaying); err != nil {
+	if err := s.repo.UpdateStatus(ctx, req.RoomID, model.RoomStatusPlaying); err != nil {
 		if errors.Is(err, roomPostgres.ErrNotFound) {
 			return nil, ErrRoomNotFound
 		}

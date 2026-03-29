@@ -131,7 +131,10 @@ func (h *MessageHandler) OnDisconnect(ctx context.Context, client *pkgws.Client)
 		return
 	}
 
-	_ = h.roomService.LeaveRoom(ctx, client.Actor(), roomID)
+	_ = h.roomService.LeaveRoom(ctx, roomDTO.LeaveRoomRequest{
+		ActorID: client.ActorID(),
+		RoomID:  roomID,
+	})
 
 	roomState, err := h.roomService.GetRoomState(ctx, roomID)
 	if err != nil {
@@ -166,7 +169,10 @@ func (h *MessageHandler) handleJoinRoom(ctx context.Context, client *pkgws.Clien
 
 	previousRoomID := client.RoomID()
 	if previousRoomID != "" && previousRoomID != p.RoomID {
-		if err := h.roomService.LeaveRoom(ctx, client.Actor(), previousRoomID); err != nil {
+		if err := h.roomService.LeaveRoom(ctx, roomDTO.LeaveRoomRequest{
+			ActorID: client.ActorID(),
+			RoomID:  previousRoomID,
+		}); err != nil {
 			writeJSON(client, ServerMessage{
 				Type: "error",
 				Payload: ErrorPayload{
@@ -179,7 +185,14 @@ func (h *MessageHandler) handleJoinRoom(ctx context.Context, client *pkgws.Clien
 		h.hub.Leave(client, previousRoomID)
 	}
 
-	roomState, err := h.roomService.JoinRoom(ctx, client.Actor(), p.RoomID)
+	roomState, err := h.roomService.JoinRoom(ctx, roomDTO.JoinRoomRequest{
+		Actor: roomDTO.ActorRequest{
+			ID:          client.ActorID(),
+			Type:        string(client.Actor().Type),
+			DisplayName: client.Actor().DisplayName,
+		},
+		RoomID: p.RoomID,
+	})
 	if err != nil {
 		message := "failed to join room"
 		if errors.Is(err, roomService.ErrRoomFull) {
@@ -234,9 +247,9 @@ func (h *MessageHandler) handleUpdateRoomSettings(ctx context.Context, client *p
 
 	roomState, err := h.roomService.UpdateRoomSettings(
 		ctx,
-		client.Actor(),
-		p.RoomID,
-		roomDTO.UpdateRoomSettingsRequest{
+		roomDTO.UpdateRoomSettingsServiceRequest{
+			ActorID:    client.ActorID(),
+			RoomID:     p.RoomID,
 			GameType:   p.GameType,
 			MaxPlayers: p.MaxPlayers,
 		},
@@ -277,7 +290,10 @@ func (h *MessageHandler) handleStartRoom(ctx context.Context, client *pkgws.Clie
 		return
 	}
 
-	roomState, err := h.roomService.StartRoom(ctx, client.ActorID(), p.RoomID)
+	roomState, err := h.roomService.StartRoom(ctx, roomDTO.StartRoomRequest{
+		ActorID: client.ActorID(),
+		RoomID:  p.RoomID,
+	})
 	if err != nil {
 		writeJSON(client, ServerMessage{
 			Type: "error",

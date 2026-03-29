@@ -29,7 +29,14 @@ func (h *Handler) CreateRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.service.CreateRoom(r.Context(), actor, req)
+	resp, err := h.service.CreateRoom(r.Context(), roomDTO.CreateRoomServiceRequest{
+		Actor: roomDTO.ActorRequest{
+			ID:          actor.ID,
+			Type:        string(actor.Type),
+			DisplayName: actor.DisplayName,
+		},
+		Name: req.Name,
+	})
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrInvalidRoomName):
@@ -102,7 +109,12 @@ func (h *Handler) UpdateRoomSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.service.UpdateRoomSettings(r.Context(), actor, roomID, req)
+	resp, err := h.service.UpdateRoomSettings(r.Context(), roomDTO.UpdateRoomSettingsServiceRequest{
+		ActorID:    actor.ID,
+		RoomID:     roomID,
+		GameType:   req.GameType,
+		MaxPlayers: req.MaxPlayers,
+	})
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrRoomNotFound):
@@ -136,7 +148,10 @@ func (h *Handler) StartRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := h.service.StartRoom(r.Context(), actor.ID, roomID)
+	resp, err := h.service.StartRoom(r.Context(), roomDTO.StartRoomRequest{
+		ActorID: actor.ID,
+		RoomID:  roomID,
+	})
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrRoomNotFound):
