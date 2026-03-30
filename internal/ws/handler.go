@@ -255,10 +255,20 @@ func (h *MessageHandler) handleUpdateRoomSettings(ctx context.Context, client *p
 		},
 	)
 	if err != nil {
+		message := "failed to update room settings"
+		switch {
+		case errors.Is(err, roomService.ErrForbidden):
+			message = "forbidden"
+		case errors.Is(err, roomService.ErrRoomNotFound):
+			message = "room not found"
+		case errors.Is(err, roomService.ErrInvalidGameType), errors.Is(err, roomService.ErrInvalidMaxPlayers):
+			message = "invalid room settings"
+		}
+
 		writeJSON(client, ServerMessage{
 			Type: "error",
 			Payload: ErrorPayload{
-				Message: "failed to update room settings",
+				Message: message,
 			},
 		})
 		return
@@ -295,10 +305,20 @@ func (h *MessageHandler) handleStartRoom(ctx context.Context, client *pkgws.Clie
 		RoomID:  p.RoomID,
 	})
 	if err != nil {
+		message := "failed to start room"
+		switch {
+		case errors.Is(err, roomService.ErrForbidden):
+			message = "forbidden"
+		case errors.Is(err, roomService.ErrRoomNotFound):
+			message = "room not found"
+		case errors.Is(err, roomService.ErrNotEnoughPlayers), errors.Is(err, roomService.ErrRoomNotReady):
+			message = err.Error()
+		}
+
 		writeJSON(client, ServerMessage{
 			Type: "error",
 			Payload: ErrorPayload{
-				Message: "failed to start room",
+				Message: message,
 			},
 		})
 		return
