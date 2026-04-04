@@ -41,7 +41,7 @@ func (r *Repository) RemoveParticipant(ctx context.Context, roomID, actorID stri
 	return nil
 }
 
-func (r *Repository) ListParticipants(ctx context.Context, roomID string) ([]model.RoomParticipantView, error) {
+func (r *Repository) ListParticipants(ctx context.Context, roomID string) ([]model.RoomParticipant, error) {
 	const op = "room.repository.postgres.ListParticipants"
 
 	query := `
@@ -57,9 +57,9 @@ func (r *Repository) ListParticipants(ctx context.Context, roomID string) ([]mod
 	}
 	defer rows.Close()
 
-	participants := make([]model.RoomParticipantView, 0)
+	participants := make([]model.RoomParticipant, 0)
 	for rows.Next() {
-		var p model.RoomParticipantView
+		var p model.RoomParticipant
 		if err := rows.Scan(
 			&p.RoomID,
 			&p.ActorID,

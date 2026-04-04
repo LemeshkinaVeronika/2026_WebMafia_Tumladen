@@ -12,11 +12,11 @@ type IRepository interface {
 	GetByInviteCode(ctx context.Context, inviteCode string) (*model.Room, error)
 	GetByID(ctx context.Context, roomID string) (*model.Room, error)
 
-	AddParticipant(ctx context.Context, roomID, actorID, displayName string) error
 	RemoveParticipant(ctx context.Context, roomID, actorID string) error
-	ListParticipants(ctx context.Context, roomID string) ([]model.RoomParticipantView, error)
+	ListParticipants(ctx context.Context, roomID string) ([]model.RoomParticipant, error)
+	JoinRoom(ctx context.Context, roomID, actorID, displayName string) (*model.Room, []model.RoomParticipant, error)
 
-	UpdateSettings(ctx context.Context, roomID, gameType string, maxPlayers int) error
+	UpdateSettings(ctx context.Context, roomID, gameType string, maxPlayers int, settings model.JSONB) (*model.Room, []model.RoomParticipant, error)
 	UpdateStatus(ctx context.Context, roomID string, status model.RoomStatus) error
 }
 

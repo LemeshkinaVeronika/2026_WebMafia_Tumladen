@@ -11,7 +11,7 @@ import (
 
 type repoStub struct {
 	room                    *model.Room
-	participants            []model.RoomParticipantView
+	participants            []model.RoomParticipant
 	updateSettingsCalled    bool
 	updateStatusCalled      bool
 	updateSettingsRoomID    string
@@ -25,17 +25,22 @@ func (r *repoStub) Create(context.Context, *model.Room) error                   
 func (r *repoStub) ListPublic(context.Context) ([]model.Room, error)             { return nil, nil }
 func (r *repoStub) GetByInviteCode(context.Context, string) (*model.Room, error) { return nil, nil }
 func (r *repoStub) GetByID(context.Context, string) (*model.Room, error)         { return r.room, nil }
-func (r *repoStub) AddParticipant(context.Context, string, string, string) error { return nil }
 func (r *repoStub) RemoveParticipant(context.Context, string, string) error      { return nil }
-func (r *repoStub) ListParticipants(context.Context, string) ([]model.RoomParticipantView, error) {
+func (r *repoStub) ListParticipants(context.Context, string) ([]model.RoomParticipant, error) {
 	return r.participants, nil
 }
-func (r *repoStub) UpdateSettings(_ context.Context, roomID, gameType string, maxPlayers int) error {
+func (r *repoStub) JoinRoom(context.Context, string, string, string) (*model.Room, []model.RoomParticipant, error) {
+	return r.room, r.participants, nil
+}
+func (r *repoStub) UpdateSettings(_ context.Context, roomID, gameType string, maxPlayers int, settings model.JSONB) (*model.Room, []model.RoomParticipant, error) {
 	r.updateSettingsCalled = true
 	r.updateSettingsRoomID = roomID
 	r.updateSettingsGameType = gameType
 	r.updateSettingsMaxPlayer = maxPlayers
-	return nil
+	r.room.GameType = gameType
+	r.room.MaxPlayers = maxPlayers
+	r.room.Settings = settings
+	return r.room, r.participants, nil
 }
 func (r *repoStub) UpdateStatus(_ context.Context, roomID string, status model.RoomStatus) error {
 	r.updateStatusCalled = true
@@ -84,7 +89,7 @@ func TestStartRoomRequiresOwner(t *testing.T) {
 			CreatedAt:    time.Now().UTC(),
 			UpdatedAt:    time.Now().UTC(),
 		},
-		participants: []model.RoomParticipantView{
+		participants: []model.RoomParticipant{
 			{ActorID: "owner-1", DisplayName: "Owner", JoinedAt: time.Now().UTC()},
 			{ActorID: "guest-2", DisplayName: "Guest", JoinedAt: time.Now().UTC()},
 		},
@@ -116,7 +121,7 @@ func TestStartRoomUpdatesStatusForOwner(t *testing.T) {
 			CreatedAt:    time.Now().UTC(),
 			UpdatedAt:    time.Now().UTC(),
 		},
-		participants: []model.RoomParticipantView{
+		participants: []model.RoomParticipant{
 			{ActorID: "owner-1", DisplayName: "Owner", JoinedAt: time.Now().UTC()},
 			{ActorID: "guest-2", DisplayName: "Guest", JoinedAt: time.Now().UTC()},
 		},

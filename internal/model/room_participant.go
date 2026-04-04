@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-type RoomParticipantView struct {
+type RoomParticipant struct {
 	RoomID      string
 	ActorID     string
 	DisplayName string

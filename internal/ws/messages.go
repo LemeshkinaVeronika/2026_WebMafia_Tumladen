@@ -1,6 +1,9 @@
 package ws
 
-import roomDTO "github.com/webmafia/tumladan/internal/room/dto"
+import (
+	"encoding/json"
+	roomDTO "github.com/webmafia/tumladan/internal/room/dto"
+)
 
 type ClientMessage struct {
 	Type    string `json:"type"`
@@ -12,9 +15,10 @@ type JoinRoomPayload struct {
 }
 
 type UpdateRoomSettingsPayload struct {
-	RoomID     string `json:"roomId"`
-	GameType   string `json:"gameType"`
-	MaxPlayers int    `json:"maxPlayers"`
+	RoomID     string          `json:"roomId"`
+	GameType   string          `json:"gameType"`
+	MaxPlayers int             `json:"maxPlayers"`
+	Settings   json.RawMessage `json:"settings"`
 }
 
 type StartRoomPayload struct {

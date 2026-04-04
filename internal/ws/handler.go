@@ -168,6 +168,34 @@ func (h *MessageHandler) handleJoinRoom(ctx context.Context, client *pkgws.Clien
 	}
 
 	previousRoomID := client.RoomID()
+	roomState, err := h.roomService.JoinRoom(ctx, roomDTO.JoinRoomRequest{
+		Actor: roomDTO.ActorRequest{
+			ID:          client.ActorID(),
+			Type:        string(client.Actor().Type),
+			DisplayName: client.Actor().DisplayName,
+		},
+		RoomID: p.RoomID,
+	})
+	if err != nil {
+		message := "failed to join room"
+		switch {
+		case errors.Is(err, roomService.ErrRoomFull):
+			message = "room is full"
+		case errors.Is(err, roomService.ErrRoomNotFound):
+			message = "room not found"
+		case errors.Is(err, roomService.ErrRoomNotJoinable):
+			message = "room is not joinable"
+		}
+
+		writeJSON(client, ServerMessage{
+			Type: "error",
+			Payload: ErrorPayload{
+				Message: message,
+			},
+		})
+		return
+	}
+
 	if previousRoomID != "" && previousRoomID != p.RoomID {
 		if err := h.roomService.LeaveRoom(ctx, roomDTO.LeaveRoomRequest{
 			ActorID: client.ActorID(),
@@ -183,29 +211,11 @@ func (h *MessageHandler) handleJoinRoom(ctx context.Context, client *pkgws.Clien
 		}
 
 		h.hub.Leave(client, previousRoomID)
-	}
 
-	roomState, err := h.roomService.JoinRoom(ctx, roomDTO.JoinRoomRequest{
-		Actor: roomDTO.ActorRequest{
-			ID:          client.ActorID(),
-			Type:        string(client.Actor().Type),
-			DisplayName: client.Actor().DisplayName,
-		},
-		RoomID: p.RoomID,
-	})
-	if err != nil {
-		message := "failed to join room"
-		if errors.Is(err, roomService.ErrRoomFull) {
-			message = "room is full"
+		previousRoomState, err := h.roomService.GetRoomState(ctx, previousRoomID)
+		if err == nil {
+			h.broadcastRoomState(previousRoomID, previousRoomState)
 		}
-
-		writeJSON(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: message,
-			},
-		})
-		return
 	}
 
 	client.SetRoomID(p.RoomID)
@@ -252,6 +262,7 @@ func (h *MessageHandler) handleUpdateRoomSettings(ctx context.Context, client *p
 			RoomID:     p.RoomID,
 			GameType:   p.GameType,
 			MaxPlayers: p.MaxPlayers,
+			Settings:   p.Settings,
 		},
 	)
 	if err != nil {
@@ -261,8 +272,12 @@ func (h *MessageHandler) handleUpdateRoomSettings(ctx context.Context, client *p
 			message = "forbidden"
 		case errors.Is(err, roomService.ErrRoomNotFound):
 			message = "room not found"
-		case errors.Is(err, roomService.ErrInvalidGameType), errors.Is(err, roomService.ErrInvalidMaxPlayers):
-			message = "invalid room settings"
+		case errors.Is(err, roomService.ErrInvalidGameType),
+			errors.Is(err, roomService.ErrInvalidMaxPlayers),
+			errors.Is(err, roomService.ErrInvalidRoomSettings),
+			errors.Is(err, roomService.ErrMaxPlayersLessThanParticipants),
+			errors.Is(err, roomService.ErrRoomSettingsLocked):
+			message = err.Error()
 		}
 
 		writeJSON(client, ServerMessage{

@@ -125,6 +125,7 @@ func (h *Handler) UpdateRoomSettings(w http.ResponseWriter, r *http.Request) {
 		ActorID:    actor.ID,
 		RoomID:     roomID,
 		GameType:   req.GameType,
+		Settings:   req.Settings,
 		MaxPlayers: req.MaxPlayers,
 	})
 	if err != nil {
@@ -134,8 +135,11 @@ func (h *Handler) UpdateRoomSettings(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, service.ErrForbidden):
 			http.Error(w, "forbidden", http.StatusForbidden)
 		case errors.Is(err, service.ErrInvalidGameType),
-			errors.Is(err, service.ErrInvalidMaxPlayers):
-			http.Error(w, "invalid room settings", http.StatusBadRequest)
+			errors.Is(err, service.ErrInvalidMaxPlayers),
+			errors.Is(err, service.ErrInvalidRoomSettings),
+			errors.Is(err, service.ErrMaxPlayersLessThanParticipants),
+			errors.Is(err, service.ErrRoomSettingsLocked):
+			http.Error(w, err.Error(), http.StatusBadRequest)
 		default:
 			http.Error(w, "internal server error", http.StatusInternalServerError)
 		}

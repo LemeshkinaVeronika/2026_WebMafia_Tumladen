@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/webmafia/tumladan/internal/model"
 )
@@ -12,9 +13,9 @@ func (r *Repository) Create(ctx context.Context, room *model.Room) error {
 
 	query := `
 		INSERT INTO rooms (
-			id, name, is_private, invite_code, owner_actor_id, status, game_type, max_players, created_at, updated_at
+			id, name, is_private, invite_code, owner_actor_id, status, game_type, max_players, settings, created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	`
 
 	_, err := r.db.ExecContext(
@@ -28,6 +29,7 @@ func (r *Repository) Create(ctx context.Context, room *model.Room) error {
 		room.Status,
 		room.GameType,
 		room.MaxPlayers,
+		room.Settings,
 		room.CreatedAt,
 		room.UpdatedAt,
 	)
@@ -42,10 +44,26 @@ func (r *Repository) ListPublic(ctx context.Context) ([]model.Room, error) {
 	const op = "room.repository.postgres.ListPublic"
 
 	query := `
-		SELECT id, name, is_private, invite_code, owner_actor_id, status, game_type, max_players, created_at, updated_at
-		FROM rooms
-		WHERE is_private = FALSE
-		ORDER BY created_at DESC
+		SELECT
+			r.id,
+			r.name,
+			r.is_private,
+			r.invite_code,
+			r.owner_actor_id,
+			r.status,
+			r.game_type,
+			r.max_players,
+			COUNT(rp.actor_id) AS players_count,
+			r.settings,
+			r.created_at,
+			r.updated_at
+		FROM rooms r
+		LEFT JOIN room_participants rp ON rp.room_id = r.id
+		WHERE r.is_private = FALSE
+		GROUP BY
+			r.id, r.name, r.is_private, r.invite_code, r.owner_actor_id,
+			r.status, r.game_type, r.max_players, r.settings, r.created_at, r.updated_at
+		ORDER BY r.created_at DESC
 	`
 
 	rows, err := r.db.QueryContext(ctx, query)
@@ -66,6 +84,8 @@ func (r *Repository) ListPublic(ctx context.Context) ([]model.Room, error) {
 			&room.Status,
 			&room.GameType,
 			&room.MaxPlayers,
+			&room.PlayersCount,
+			&room.Settings,
 			&room.CreatedAt,
 			&room.UpdatedAt,
 		); err != nil {
@@ -86,7 +106,7 @@ func (r *Repository) GetByInviteCode(ctx context.Context, inviteCode string) (*m
 	const op = "room.repository.postgres.GetByInviteCode"
 
 	query := `
-		SELECT id, name, is_private, invite_code, owner_actor_id, status, game_type, max_players, created_at, updated_at
+		SELECT id, name, is_private, invite_code, owner_actor_id, status, game_type, max_players, settings, created_at, updated_at
 		FROM rooms
 		WHERE invite_code = $1
 		LIMIT 1
@@ -102,6 +122,7 @@ func (r *Repository) GetByInviteCode(ctx context.Context, inviteCode string) (*m
 		&room.Status,
 		&room.GameType,
 		&room.MaxPlayers,
+		&room.Settings,
 		&room.CreatedAt,
 		&room.UpdatedAt,
 	)
@@ -116,7 +137,7 @@ func (r *Repository) GetByID(ctx context.Context, roomID string) (*model.Room, e
 	const op = "room.repository.postgres.GetByID"
 
 	query := `
-		SELECT id, name, is_private, invite_code, owner_actor_id, status, game_type, max_players, created_at, updated_at
+		SELECT id, name, is_private, invite_code, owner_actor_id, status, game_type, max_players, settings, created_at, updated_at
 		FROM rooms
 		WHERE id = $1
 		LIMIT 1
@@ -132,6 +153,7 @@ func (r *Repository) GetByID(ctx context.Context, roomID string) (*model.Room, e
 		&room.Status,
 		&room.GameType,
 		&room.MaxPlayers,
+		&room.Settings,
 		&room.CreatedAt,
 		&room.UpdatedAt,
 	)
@@ -142,32 +164,61 @@ func (r *Repository) GetByID(ctx context.Context, roomID string) (*model.Room, e
 	return &room, nil
 }
 
-func (r *Repository) UpdateSettings(ctx context.Context, roomID, gameType string, maxPlayers int) error {
-	const op = "room.repository.postgres.UpdateSettings"
+func (r *Repository) UpdateSettings(ctx context.Context, roomID, gameType string, maxPlayers int, settings model.JSONB) (*model.Room, []model.RoomParticipant, error) {
+	const op = "room.repository.postgres.UpdateRoomSettings"
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: begin tx failed: %w", op, err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	room, err := r.getRoomByIDForUpdate(ctx, tx, roomID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: get room for update failed: %w", op, err)
+	}
+
+	participants, err := r.listParticipantsTx(ctx, tx, roomID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: list participants failed: %w", op, err)
+	}
+
+	if len(participants) > maxPlayers {
+		return nil, nil, ErrMaxPlayersLessThanParticipants
+	}
+
+	if room.Status != model.RoomStatusWaiting {
+		return nil, nil, ErrRoomSettingsLocked
+	}
 
 	query := `
-		UPDATE rooms
-		SET game_type = $2,
-		    max_players = $3,
-		    updated_at = NOW()
-		WHERE id = $1
-	`
+	UPDATE rooms
+	SET game_type = $2,
+	    max_players = $3,
+	    settings = $4,
+	    updated_at = NOW()
+	WHERE id = $1
+	RETURNING updated_at
+`
 
-	result, err := r.db.ExecContext(ctx, query, roomID, gameType, maxPlayers)
-	if err != nil {
-		return fmt.Errorf("[%s]: exec failed: %w", op, err)
+	var updatedAt time.Time
+	if err := tx.QueryRowContext(ctx, query, roomID, gameType, maxPlayers, settings).Scan(&updatedAt); err != nil {
+		return nil, nil, fmt.Errorf("[%s]: update failed: %w", op, err)
 	}
 
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("[%s]: rows affected failed: %w", op, err)
+	room.GameType = gameType
+	room.MaxPlayers = maxPlayers
+	room.Settings = settings
+	room.UpdatedAt = updatedAt
+	room.PlayersCount = len(participants)
+
+	if err := tx.Commit(); err != nil {
+		return nil, nil, fmt.Errorf("[%s]: commit failed: %w", op, err)
 	}
 
-	if rowsAffected == 0 {
-		return ErrNotFound
-	}
-
-	return nil
+	return room, participants, nil
 }
 
 func (r *Repository) UpdateStatus(ctx context.Context, roomID string, status model.RoomStatus) error {
@@ -195,4 +246,59 @@ func (r *Repository) UpdateStatus(ctx context.Context, roomID string, status mod
 	}
 
 	return nil
+}
+
+func (r *Repository) JoinRoom(ctx context.Context, roomID, actorID, displayName string) (*model.Room, []model.RoomParticipant, error) {
+	const op = "room.repository.postgres.JoinRoom"
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: begin tx failed: %w", op, err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	room, err := r.getRoomByIDForUpdate(ctx, tx, roomID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: get room for update failed: %w", op, err)
+	}
+
+	if room.Status != model.RoomStatusWaiting {
+		return nil, nil, ErrRoomNotJoinable
+	}
+
+	participants, err := r.listParticipantsTx(ctx, tx, roomID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: list participants failed: %w", op, err)
+	}
+
+	alreadyInRoom := false
+	for _, participant := range participants {
+		if participant.ActorID == actorID {
+			alreadyInRoom = true
+			break
+		}
+	}
+
+	if !alreadyInRoom && len(participants) >= room.MaxPlayers {
+		return nil, nil, ErrRoomFull
+	}
+
+	if err := r.addParticipantTx(ctx, tx, roomID, actorID, displayName); err != nil {
+		return nil, nil, fmt.Errorf("[%s]: add participant failed: %w", op, err)
+	}
+
+	participants, err = r.listParticipantsTx(ctx, tx, roomID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: list participants after insert failed: %w", op, err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, nil, fmt.Errorf("[%s]: commit failed: %w", op, err)
+	}
+
+	room.PlayersCount = len(participants)
+
+	return room, participants, nil
 }

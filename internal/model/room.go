@@ -19,6 +19,8 @@ type Room struct {
 	Status       RoomStatus
 	GameType     string
 	MaxPlayers   int
+	Settings     JSONB
+	PlayersCount int
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }

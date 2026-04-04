@@ -1,5 +1,7 @@
 package dto
 
+import "encoding/json"
+
 type CreateRoomRequest struct {
 	Name string `json:"name"`
 }
@@ -26,15 +28,17 @@ type LeaveRoomRequest struct {
 }
 
 type UpdateRoomSettingsRequest struct {
-	GameType   string `json:"gameType"`
-	MaxPlayers int    `json:"maxPlayers"`
+	GameType   string          `json:"gameType"`
+	MaxPlayers int             `json:"maxPlayers"`
+	Settings   json.RawMessage `json:"settings"`
 }
 
 type UpdateRoomSettingsServiceRequest struct {
-	ActorID    string `json:"actorId"`
-	RoomID     string `json:"roomId"`
-	GameType   string `json:"gameType"`
-	MaxPlayers int    `json:"maxPlayers"`
+	ActorID    string          `json:"actorId"`
+	RoomID     string          `json:"roomId"`
+	GameType   string          `json:"gameType"`
+	MaxPlayers int             `json:"maxPlayers"`
+	Settings   json.RawMessage `json:"settings"`
 }
 
 type StartRoomRequest struct {
@@ -51,6 +55,7 @@ type RoomResponse struct {
 	Status       string                `json:"status"`
 	GameType     string                `json:"gameType"`
 	MaxPlayers   int                   `json:"maxPlayers"`
+	Settings     json.RawMessage       `json:"settings,omitempty"`
 	CanStart     bool                  `json:"canStart"`
 	PlayersCount int                   `json:"playersCount"`
 	Participants []ParticipantResponse `json:"participants,omitempty"`
