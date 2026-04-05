@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	matchDTO "github.com/webmafia/tumladan/internal/match/dto"
+	matchService "github.com/webmafia/tumladan/internal/match/service"
 	roomDTO "github.com/webmafia/tumladan/internal/room/dto"
 	"net/http"
 
@@ -15,30 +17,34 @@ import (
 )
 
 type Handler struct {
-	roomService *roomService.Service
-	jwtProvider *jwtprovider.JWTProvider
-	hub         *pkgws.Hub
-	upgrader    websocket.Upgrader
-	wsConfig    pkgws.Config
+	roomService  *roomService.Service
+	matchService *matchService.Service
+	jwtProvider  *jwtprovider.JWTProvider
+	hub          *pkgws.Hub
+	upgrader     websocket.Upgrader
+	wsConfig     pkgws.Config
 }
 
 type MessageHandler struct {
-	roomService *roomService.Service
-	hub         *pkgws.Hub
+	roomService  *roomService.Service
+	matchService *matchService.Service
+	hub          *pkgws.Hub
 }
 
 func NewHandler(
 	roomService *roomService.Service,
+	matchService *matchService.Service,
 	jwtProvider *jwtprovider.JWTProvider,
 	hub *pkgws.Hub,
 	wsConfig pkgws.Config,
 ) *Handler {
 	return &Handler{
-		roomService: roomService,
-		jwtProvider: jwtProvider,
-		hub:         hub,
-		upgrader:    pkgws.NewUpgrader(wsConfig),
-		wsConfig:    wsConfig,
+		roomService:  roomService,
+		matchService: matchService,
+		jwtProvider:  jwtProvider,
+		hub:          hub,
+		upgrader:     pkgws.NewUpgrader(wsConfig),
+		wsConfig:     wsConfig,
 	}
 }
 
@@ -76,8 +82,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	messageHandler := &MessageHandler{
-		roomService: h.roomService,
-		hub:         h.hub,
+		roomService:  h.roomService,
+		matchService: h.matchService,
+		hub:          h.hub,
 	}
 
 	client := pkgws.NewClient(
@@ -114,6 +121,18 @@ func (h *MessageHandler) HandleMessage(ctx context.Context, client *pkgws.Client
 
 	case "start_room":
 		h.handleStartRoom(ctx, client, msg.Payload)
+
+	case "match_action":
+		h.handleMatchAction(ctx, client, msg.Payload)
+
+	case "finish_room_match":
+		h.handleFinishRoomMatch(ctx, client, msg.Payload)
+
+	case "delete_room":
+		h.handleDeleteRoom(ctx, client, msg.Payload)
+
+	case "abandon_room_match":
+		h.handleAbandonRoomMatch(ctx, client, msg.Payload)
 
 	default:
 		writeJSON(client, ServerMessage{
@@ -222,6 +241,7 @@ func (h *MessageHandler) handleJoinRoom(ctx context.Context, client *pkgws.Clien
 	h.hub.Register(client)
 
 	h.broadcastRoomState(p.RoomID, roomState)
+	h.sendActiveMatchStateIfExists(ctx, client, p.RoomID)
 }
 
 func writeJSON(client *pkgws.Client, msg ServerMessage) {
@@ -340,6 +360,19 @@ func (h *MessageHandler) handleStartRoom(ctx context.Context, client *pkgws.Clie
 	}
 
 	h.broadcastRoomState(p.RoomID, roomState)
+
+	matchState, err := h.matchService.GetActiveByRoomID(ctx, p.RoomID)
+	if err != nil {
+		writeJSON(client, ServerMessage{
+			Type: "error",
+			Payload: ErrorPayload{
+				Message: "failed to load started match",
+			},
+		})
+		return
+	}
+
+	h.broadcastMatchState(p.RoomID, matchState)
 }
 
 func (h *MessageHandler) broadcastRoomState(roomID string, roomState any) {
@@ -352,4 +385,314 @@ func (h *MessageHandler) broadcastRoomState(roomID string, roomState any) {
 	}
 
 	h.hub.BroadcastTo(roomID, msg)
+}
+
+func (h *MessageHandler) sendMatchState(client *pkgws.Client, matchState any) {
+	writeJSON(client, ServerMessage{
+		Type:    "match_state",
+		Payload: matchState,
+	})
+}
+
+func (h *MessageHandler) broadcastMatchState(roomID string, matchState any) {
+	msg, err := json.Marshal(ServerMessage{
+		Type:    "match_state",
+		Payload: matchState,
+	})
+	if err != nil {
+		return
+	}
+
+	h.hub.BroadcastTo(roomID, msg)
+}
+
+func (h *MessageHandler) sendActiveMatchStateIfExists(ctx context.Context, client *pkgws.Client, roomID string) {
+	matchState, err := h.matchService.GetActiveByRoomID(ctx, roomID)
+	if err != nil {
+		if errors.Is(err, matchService.ErrMatchNotFound) {
+			return
+		}
+
+		writeJSON(client, ServerMessage{
+			Type: "error",
+			Payload: ErrorPayload{
+				Message: "failed to load active match",
+			},
+		})
+		return
+	}
+
+	h.sendMatchState(client, matchState)
+}
+
+func (h *MessageHandler) broadcastMatchEvent(roomID, eventType string, matchState any) {
+	msg, err := json.Marshal(ServerMessage{
+		Type:    eventType,
+		Payload: matchState,
+	})
+	if err != nil {
+		return
+	}
+
+	h.hub.BroadcastTo(roomID, msg)
+}
+
+func (h *MessageHandler) handleMatchAction(ctx context.Context, client *pkgws.Client, payload any) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		writeJSON(client, ServerMessage{
+			Type: "error",
+			Payload: ErrorPayload{
+				Message: "invalid payload",
+			},
+		})
+		return
+	}
+
+	var p MatchActionPayload
+	if err := json.Unmarshal(raw, &p); err != nil || p.RoomID == "" || p.Action == "" {
+		writeJSON(client, ServerMessage{
+			Type: "error",
+			Payload: ErrorPayload{
+				Message: "invalid match action payload",
+			},
+		})
+		return
+	}
+
+	matchState, err := h.matchService.ApplyAction(ctx, matchDTO.ApplyMatchActionRequest{
+		ActorID: client.ActorID(),
+		RoomID:  p.RoomID,
+		Action:  p.Action,
+		Payload: marshalRawMessage(p.Payload),
+	})
+	if err != nil {
+		message := "failed to apply match action"
+		switch {
+		case errors.Is(err, matchService.ErrMatchNotFound):
+			message = "match not found"
+		case errors.Is(err, matchService.ErrMatchNotActive):
+			message = "match is not active"
+		case errors.Is(err, matchService.ErrInvalidMatchAction):
+			message = "invalid match action"
+		case errors.Is(err, matchService.ErrNotYourTurn):
+			message = "not your turn"
+		}
+
+		writeJSON(client, ServerMessage{
+			Type: "error",
+			Payload: ErrorPayload{
+				Message: message,
+			},
+		})
+		return
+	}
+
+	h.broadcastMatchState(p.RoomID, matchState)
+}
+
+func marshalRawMessage(v any) json.RawMessage {
+	if v == nil {
+		return json.RawMessage([]byte(`null`))
+	}
+
+	data, err := json.Marshal(v)
+	if err != nil {
+		return json.RawMessage([]byte(`null`))
+	}
+
+	return json.RawMessage(data)
+}
+
+func (h *MessageHandler) handleFinishRoomMatch(ctx context.Context, client *pkgws.Client, payload any) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		writeJSON(client, ServerMessage{
+			Type:    "error",
+			Payload: ErrorPayload{Message: "invalid payload"},
+		})
+		return
+	}
+
+	var p FinishRoomMatchPayload
+	if err := json.Unmarshal(raw, &p); err != nil || p.RoomID == "" {
+		writeJSON(client, ServerMessage{
+			Type:    "error",
+			Payload: ErrorPayload{Message: "invalid finish room match payload"},
+		})
+		return
+	}
+
+	if err := h.roomService.FinishRoomMatch(ctx, roomDTO.FinishRoomMatchRequest{
+		ActorID: client.ActorID(),
+		RoomID:  p.RoomID,
+	}); err != nil {
+		message := "failed to finish match"
+		switch {
+		case errors.Is(err, roomService.ErrForbidden):
+			message = "forbidden"
+		case errors.Is(err, roomService.ErrRoomNotFound):
+			message = "room not found"
+		case errors.Is(err, roomService.ErrActiveMatchNotFound):
+			message = "active match not found"
+		}
+
+		writeJSON(client, ServerMessage{
+			Type:    "error",
+			Payload: ErrorPayload{Message: message},
+		})
+		return
+	}
+
+	roomState, err := h.roomService.GetRoomState(ctx, p.RoomID)
+	if err == nil {
+		h.broadcastRoomState(p.RoomID, roomState)
+	}
+
+	matchState, err := h.matchService.GetLastByRoomID(ctx, p.RoomID)
+	if err == nil {
+		h.broadcastMatchEvent(p.RoomID, "match_finished", matchState)
+	}
+}
+
+func (h *MessageHandler) handleDeleteRoom(ctx context.Context, client *pkgws.Client, payload any) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		writeJSON(client, ServerMessage{
+			Type:    "error",
+			Payload: ErrorPayload{Message: "invalid payload"},
+		})
+		return
+	}
+
+	var p DeleteRoomPayload
+	if err := json.Unmarshal(raw, &p); err != nil || p.RoomID == "" {
+		writeJSON(client, ServerMessage{
+			Type:    "error",
+			Payload: ErrorPayload{Message: "invalid delete room payload"},
+		})
+		return
+	}
+
+	roomState, err := h.roomService.GetRoomState(ctx, p.RoomID)
+	if err != nil {
+		writeJSON(client, ServerMessage{
+			Type:    "error",
+			Payload: ErrorPayload{Message: "room not found"},
+		})
+		return
+	}
+
+	if roomState.OwnerActorID != client.ActorID() {
+		writeJSON(client, ServerMessage{
+			Type:    "error",
+			Payload: ErrorPayload{Message: "forbidden"},
+		})
+		return
+	}
+
+	if roomState.Status == string(model.RoomStatusPlaying) {
+		if err := h.roomService.AbandonRoomMatch(ctx, p.RoomID, "room_deleted"); err == nil {
+			matchState, matchErr := h.matchService.GetLastByRoomID(ctx, p.RoomID)
+			if matchErr == nil {
+				h.broadcastMatchEvent(p.RoomID, "match_abandoned", matchState)
+			}
+		}
+	}
+
+	if err := h.roomService.DeleteRoom(ctx, roomDTO.DeleteRoomRequest{
+		ActorID: client.ActorID(),
+		RoomID:  p.RoomID,
+	}); err != nil {
+		message := "failed to delete room"
+		switch {
+		case errors.Is(err, roomService.ErrForbidden):
+			message = "forbidden"
+		case errors.Is(err, roomService.ErrRoomNotFound):
+			message = "room not found"
+		}
+
+		writeJSON(client, ServerMessage{
+			Type:    "error",
+			Payload: ErrorPayload{Message: message},
+		})
+		return
+	}
+
+	msg, err := json.Marshal(ServerMessage{
+		Type: "room_deleted",
+		Payload: map[string]string{
+			"roomId": p.RoomID,
+		},
+	})
+	if err == nil {
+		h.hub.BroadcastTo(p.RoomID, msg)
+	}
+}
+
+func (h *MessageHandler) handleAbandonRoomMatch(ctx context.Context, client *pkgws.Client, payload any) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		writeJSON(client, ServerMessage{
+			Type:    "error",
+			Payload: ErrorPayload{Message: "invalid payload"},
+		})
+		return
+	}
+
+	var p AbandonRoomMatchPayload
+	if err := json.Unmarshal(raw, &p); err != nil || p.RoomID == "" {
+		writeJSON(client, ServerMessage{
+			Type:    "error",
+			Payload: ErrorPayload{Message: "invalid abandon room match payload"},
+		})
+		return
+	}
+
+	reason := p.Reason
+	if reason == "" {
+		reason = "abandoned_by_owner"
+	}
+
+	room, err := h.roomService.GetRoomState(ctx, p.RoomID)
+	if err != nil {
+		writeJSON(client, ServerMessage{
+			Type:    "error",
+			Payload: ErrorPayload{Message: "room not found"},
+		})
+		return
+	}
+
+	if room.OwnerActorID != client.ActorID() {
+		writeJSON(client, ServerMessage{
+			Type:    "error",
+			Payload: ErrorPayload{Message: "forbidden"},
+		})
+		return
+	}
+
+	if err := h.roomService.AbandonRoomMatch(ctx, p.RoomID, reason); err != nil {
+		message := "failed to abandon match"
+		switch {
+		case errors.Is(err, roomService.ErrRoomNotFound):
+			message = "room not found"
+		case errors.Is(err, roomService.ErrActiveMatchNotFound):
+			message = "active match not found"
+		}
+		writeJSON(client, ServerMessage{
+			Type:    "error",
+			Payload: ErrorPayload{Message: message},
+		})
+		return
+	}
+
+	roomState, err := h.roomService.GetRoomState(ctx, p.RoomID)
+	if err == nil {
+		h.broadcastRoomState(p.RoomID, roomState)
+	}
+
+	matchState, err := h.matchService.GetLastByRoomID(ctx, p.RoomID)
+	if err == nil {
+		h.broadcastMatchEvent(p.RoomID, "match_abandoned", matchState)
+	}
 }

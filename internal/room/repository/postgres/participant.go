@@ -28,14 +28,32 @@ func (r *Repository) AddParticipant(ctx context.Context, roomID, actorID, displa
 func (r *Repository) RemoveParticipant(ctx context.Context, roomID, actorID string) error {
 	const op = "room.repository.postgres.RemoveParticipant"
 
-	query := `
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("[%s]: begin tx failed: %w", op, err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	_, err = tx.ExecContext(ctx, `
 		DELETE FROM room_participants
 		WHERE room_id = $1 AND actor_id = $2
-	`
-
-	_, err := r.db.ExecContext(ctx, query, roomID, actorID)
+	`, roomID, actorID)
 	if err != nil {
-		return fmt.Errorf("[%s]: exec failed: %w", op, err)
+		return fmt.Errorf("[%s]: delete participant failed: %w", op, err)
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		UPDATE rooms
+		SET updated_at = NOW()
+		WHERE id = $1`, roomID)
+	if err != nil {
+		return fmt.Errorf("[%s]: update updated_at failed: %w", op, err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("[%s]: commit failed: %w", op, err)
 	}
 
 	return nil

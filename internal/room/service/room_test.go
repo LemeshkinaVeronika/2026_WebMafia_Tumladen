@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -10,15 +11,16 @@ import (
 )
 
 type repoStub struct {
-	room                    *model.Room
-	participants            []model.RoomParticipant
-	updateSettingsCalled    bool
-	updateStatusCalled      bool
-	updateSettingsRoomID    string
-	updateSettingsGameType  string
-	updateSettingsMaxPlayer int
-	updateStatusRoomID      string
-	updateStatusValue       model.RoomStatus
+	room                     *model.Room
+	participants             []model.RoomParticipant
+	updateSettingsCalled     bool
+	startRoomWithMatchCalled bool
+	updateSettingsRoomID     string
+	updateSettingsGameType   string
+	updateSettingsMaxPlayer  int
+	startRoomWithMatchRoomID string
+	startedMatch             *model.Match
+	startedMatchPlayers      []model.MatchPlayer
 }
 
 func (r *repoStub) Create(context.Context, *model.Room) error                    { return nil }
@@ -42,11 +44,29 @@ func (r *repoStub) UpdateSettings(_ context.Context, roomID, gameType string, ma
 	r.room.Settings = settings
 	return r.room, r.participants, nil
 }
-func (r *repoStub) UpdateStatus(_ context.Context, roomID string, status model.RoomStatus) error {
-	r.updateStatusCalled = true
-	r.updateStatusRoomID = roomID
-	r.updateStatusValue = status
+func (r *repoStub) UpdateStatus(context.Context, string, model.RoomStatus) error {
 	return nil
+}
+func (r *repoStub) StartRoomWithMatch(_ context.Context, roomID string, match *model.Match, players []model.MatchPlayer) (*model.Room, []model.RoomParticipant, error) {
+	r.startRoomWithMatchCalled = true
+	r.startRoomWithMatchRoomID = roomID
+	r.startedMatch = match
+	r.startedMatchPlayers = players
+	r.room.Status = model.RoomStatusPlaying
+	return r.room, r.participants, nil
+}
+func (r *repoStub) FinishActiveMatch(context.Context, string, model.JSONB) (*model.Match, []model.MatchPlayer, error) {
+	return nil, nil, nil
+}
+func (r *repoStub) AbandonActiveMatch(context.Context, string, string) (*model.Match, []model.MatchPlayer, error) {
+	return nil, nil, nil
+}
+func (r *repoStub) DeleteRoom(context.Context, string) error { return nil }
+func (r *repoStub) FindStaleEmptyWaitingRooms(context.Context, time.Time) ([]model.Room, error) {
+	return nil, nil
+}
+func (r *repoStub) FindStaleEmptyPlayingRooms(context.Context, time.Time) ([]model.Room, error) {
+	return nil, nil
 }
 
 func TestUpdateRoomSettingsRequiresOwner(t *testing.T) {
@@ -104,8 +124,8 @@ func TestStartRoomRequiresOwner(t *testing.T) {
 	if err != ErrForbidden {
 		t.Fatalf("expected ErrForbidden, got %v", err)
 	}
-	if repo.updateStatusCalled {
-		t.Fatal("expected UpdateStatus not to be called")
+	if repo.startRoomWithMatchCalled {
+		t.Fatal("expected StartRoomWithMatch not to be called")
 	}
 }
 
@@ -136,14 +156,24 @@ func TestStartRoomUpdatesStatusForOwner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
-	if !repo.updateStatusCalled {
-		t.Fatal("expected UpdateStatus to be called")
+	if !repo.startRoomWithMatchCalled {
+		t.Fatal("expected StartRoomWithMatch to be called")
 	}
-	if repo.updateStatusRoomID != "room-1" {
-		t.Fatalf("expected room id room-1, got %s", repo.updateStatusRoomID)
+	if repo.startRoomWithMatchRoomID != "room-1" {
+		t.Fatalf("expected room id room-1, got %s", repo.startRoomWithMatchRoomID)
 	}
-	if repo.updateStatusValue != model.RoomStatusPlaying {
-		t.Fatalf("expected status %s, got %s", model.RoomStatusPlaying, repo.updateStatusValue)
+	if repo.startedMatch == nil {
+		t.Fatal("expected match to be created")
+	}
+	if repo.startedMatch.Status != model.MatchStatusActive {
+		t.Fatalf("expected match status %s, got %s", model.MatchStatusActive, repo.startedMatch.Status)
+	}
+	if len(repo.startedMatchPlayers) != len(repo.participants) {
+		t.Fatalf("expected %d match players, got %d", len(repo.participants), len(repo.startedMatchPlayers))
+	}
+	var gameState map[string]any
+	if err := json.Unmarshal(repo.startedMatch.GameState, &gameState); err != nil {
+		t.Fatalf("expected valid game state json, got %v", err)
 	}
 	if resp.Status != string(model.RoomStatusPlaying) {
 		t.Fatalf("expected response status %s, got %s", model.RoomStatusPlaying, resp.Status)

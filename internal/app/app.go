@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	matchPostgres "github.com/webmafia/tumladan/internal/match/repository/postgres"
+	matchService "github.com/webmafia/tumladan/internal/match/service"
 	internalws "github.com/webmafia/tumladan/internal/ws"
 	"log/slog"
 	"net/http"
@@ -62,12 +64,15 @@ func New(ctx context.Context) (*App, error) {
 	roomSvc := roomService.New(roomRepo)
 	roomHandler := roomHTTP.NewHandler(roomSvc)
 
+	matchRepo := matchPostgres.New(db)
+	matchSvc := matchService.New(matchRepo)
+
 	wsConfig := pkgws.NewDefaultConfig()
 	wsConfig.AllowedOrigins = cfg.CORS.AllowedOrigins
 	hub := pkgws.NewHub()
 	go hub.Run(ctx)
 
-	wsHandler := internalws.NewHandler(roomSvc, jwtProvider, hub, wsConfig)
+	wsHandler := internalws.NewHandler(roomSvc, matchSvc, jwtProvider, hub, wsConfig)
 
 	r := router.NewRouter(
 		router.AppHandlers{

@@ -15,7 +15,7 @@ MIGRATIONS_PATH := migrations
 COVERAGE_FILE := coverage.out
 GO_PACKAGES := $(shell go list ./... | grep -v '/mocks')
 
-.PHONY: generate test coverage-html clean docker-build docker-up docker-down docker-stop docker-logs migrate-down
+.PHONY: generate test coverage-html clean docker-build docker-up docker-down docker-stop docker-logs migrate-up migrate-down
 
 generate:
 	@echo "==> Generating..."
@@ -55,6 +55,10 @@ docker-stop:
 docker-logs:
 	@echo "==> Following container logs..."
 	@$(DOCKER_COMPOSE) logs -f
+
+migrate-up:
+	@echo "==> Applying migrations..."
+	@migrate -path $(MIGRATIONS_PATH) -database "$(DB_URL)" up
 
 migrate-down:
 	@echo "==> Rolling back migrations..."

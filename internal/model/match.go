@@ -18,7 +18,7 @@ type Match struct {
 	GameType  string
 	Status    MatchStatus
 	GameState JSONB
-	Result    JSONB
+	Result    *JSONB
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

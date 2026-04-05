@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"github.com/webmafia/tumladan/internal/model"
+	"time"
 )
 
 func (r *Repository) getRoomByIDForUpdate(ctx context.Context, tx *sql.Tx, roomID string) (*model.Room, error) {
@@ -80,4 +81,159 @@ func (r *Repository) addParticipantTx(ctx context.Context, tx *sql.Tx, roomID, a
 
 	_, err := tx.ExecContext(ctx, query, roomID, actorID, displayName)
 	return err
+}
+
+func (r *Repository) createMatchTx(ctx context.Context, tx *sql.Tx, match *model.Match) error {
+	query := `
+		INSERT INTO matches (
+			id, room_id, game_type, status, game_state, result, created_at, updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+	`
+
+	_, err := tx.ExecContext(
+		ctx,
+		query,
+		match.ID,
+		match.RoomID,
+		match.GameType,
+		match.Status,
+		match.GameState,
+		match.Result,
+		match.CreatedAt,
+		match.UpdatedAt,
+	)
+	return err
+}
+
+func (r *Repository) createMatchPlayersTx(ctx context.Context, tx *sql.Tx, players []model.MatchPlayer) error {
+	query := `
+		INSERT INTO match_players (match_id, actor_id, display_name, seat)
+		VALUES ($1, $2, $3, $4)
+	`
+
+	for _, player := range players {
+		if _, err := tx.ExecContext(
+			ctx,
+			query,
+			player.MatchID,
+			player.ActorID,
+			player.DisplayName,
+			player.Seat,
+		); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (r *Repository) getActiveMatchByRoomIDForUpdate(ctx context.Context, tx *sql.Tx, roomID string) (*model.Match, error) {
+	query := `
+		SELECT id, room_id, game_type, status, game_state, result, created_at, updated_at
+		FROM matches
+		WHERE room_id = $1 AND status = 'active'
+		ORDER BY created_at DESC
+		LIMIT 1
+		FOR UPDATE
+	`
+
+	var match model.Match
+	err := tx.QueryRowContext(ctx, query, roomID).Scan(
+		&match.ID,
+		&match.RoomID,
+		&match.GameType,
+		&match.Status,
+		&match.GameState,
+		&match.Result,
+		&match.CreatedAt,
+		&match.UpdatedAt,
+	)
+	if err != nil {
+		err = mapErrors(err)
+		if err == ErrNotFound {
+			return nil, ErrActiveMatchNotFound
+		}
+		return nil, err
+	}
+
+	return &match, nil
+}
+
+func (r *Repository) listMatchPlayersTx(ctx context.Context, tx *sql.Tx, matchID string) ([]model.MatchPlayer, error) {
+	query := `
+		SELECT match_id, actor_id, display_name, seat
+		FROM match_players
+		WHERE match_id = $1
+		ORDER BY seat ASC
+	`
+
+	rows, err := tx.QueryContext(ctx, query, matchID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	players := make([]model.MatchPlayer, 0)
+	for rows.Next() {
+		var player model.MatchPlayer
+		if err := rows.Scan(
+			&player.MatchID,
+			&player.ActorID,
+			&player.DisplayName,
+			&player.Seat,
+		); err != nil {
+			return nil, err
+		}
+		players = append(players, player)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return players, nil
+}
+
+func (r *Repository) updateMatchStateTx(ctx context.Context, tx *sql.Tx, matchID string, state model.JSONB, status model.MatchStatus, result *model.JSONB) error {
+	query := `
+		UPDATE matches
+		SET game_state = $2,
+		    status = $3,
+		    result = $4,
+		    updated_at = NOW()
+		WHERE id = $1
+	`
+
+	res, err := tx.ExecContext(ctx, query, matchID, state, status, result)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+func (r *Repository) updateRoomStatusTx(ctx context.Context, tx *sql.Tx, roomID string, status model.RoomStatus) (time.Time, error) {
+	query := `
+		UPDATE rooms
+		SET status = $2,
+		    updated_at = NOW()
+		WHERE id = $1
+		RETURNING updated_at
+	`
+
+	var updatedAt time.Time
+	if err := tx.QueryRowContext(ctx, query, roomID, status).Scan(&updatedAt); err != nil {
+		return time.Time{}, err
+	}
+
+	return updatedAt, nil
 }

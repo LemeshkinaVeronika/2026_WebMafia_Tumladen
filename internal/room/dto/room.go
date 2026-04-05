@@ -76,3 +76,13 @@ type ListPublicRoomsResponse struct {
 type GetRoomByInviteCodeResponse struct {
 	Room RoomResponse `json:"room"`
 }
+
+type FinishRoomMatchRequest struct {
+	ActorID string `json:"actorId"`
+	RoomID  string `json:"roomId"`
+}
+
+type DeleteRoomRequest struct {
+	ActorID string `json:"actorId"`
+	RoomID  string `json:"roomId"`
+}

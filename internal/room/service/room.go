@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	matchService "github.com/webmafia/tumladan/internal/match/service"
 	"github.com/webmafia/tumladan/internal/model"
 	"github.com/webmafia/tumladan/internal/room/dto"
 	roomPostgres "github.com/webmafia/tumladan/internal/room/repository/postgres"
@@ -274,18 +275,102 @@ func (s *Service) StartRoom(ctx context.Context, req dto.StartRoomRequest) (*dto
 		return nil, ErrNotEnoughPlayers
 	}
 
-	if err := s.repo.UpdateStatus(ctx, req.RoomID, model.RoomStatusPlaying); err != nil {
-		if errors.Is(err, roomPostgres.ErrNotFound) {
-			return nil, ErrRoomNotFound
-		}
+	match, matchPlayers, err := matchService.BuildInitialMatch(room, participants)
+	if err != nil {
 		return nil, err
 	}
 
-	room.Status = model.RoomStatusPlaying
-	room.UpdatedAt = time.Now().UTC()
+	updatedRoom, updatedParticipants, err := s.repo.StartRoomWithMatch(ctx, req.RoomID, match, matchPlayers)
+	if err != nil {
+		switch {
+		case errors.Is(err, roomPostgres.ErrNotFound):
+			return nil, ErrRoomNotFound
+		case errors.Is(err, roomPostgres.ErrRoomNotReady):
+			return nil, ErrRoomNotReady
+		case errors.Is(err, roomPostgres.ErrNotEnoughPlayers):
+			return nil, ErrNotEnoughPlayers
+		default:
+			return nil, err
+		}
+	}
 
-	resp := roomWithParticipantsToResponse(*room, participants)
+	resp := roomWithParticipantsToResponse(*updatedRoom, updatedParticipants)
 	return &resp, nil
+}
+
+// TODO:не забыть убрать заглушку
+func (s *Service) FinishRoomMatch(ctx context.Context, req dto.FinishRoomMatchRequest) error {
+	room, err := s.repo.GetByID(ctx, req.RoomID)
+	if err != nil {
+		if errors.Is(err, roomPostgres.ErrNotFound) {
+			return ErrRoomNotFound
+		}
+		return err
+	}
+
+	if room.OwnerActorID != req.ActorID {
+		return ErrForbidden
+	}
+
+	resultJSON, err := json.Marshal(map[string]any{
+		"finished": true,
+	})
+	if err != nil {
+		return err
+	}
+
+	_, _, err = s.repo.FinishActiveMatch(ctx, req.RoomID, model.JSONB(resultJSON))
+	if err != nil {
+		switch {
+		case errors.Is(err, roomPostgres.ErrNotFound):
+			return ErrRoomNotFound
+		case errors.Is(err, roomPostgres.ErrActiveMatchNotFound):
+			return ErrActiveMatchNotFound
+		default:
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *Service) AbandonRoomMatch(ctx context.Context, roomID string, reason string) error {
+	_, _, err := s.repo.AbandonActiveMatch(ctx, roomID, reason)
+	if err != nil {
+		switch {
+		case errors.Is(err, roomPostgres.ErrActiveMatchNotFound):
+			return ErrActiveMatchNotFound
+		case errors.Is(err, roomPostgres.ErrNotFound):
+			return ErrRoomNotFound
+		default:
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (s *Service) DeleteRoom(ctx context.Context, req dto.DeleteRoomRequest) error {
+	room, err := s.repo.GetByID(ctx, req.RoomID)
+	if err != nil {
+		if errors.Is(err, roomPostgres.ErrNotFound) {
+			return ErrRoomNotFound
+		}
+		return err
+	}
+
+	if room.OwnerActorID != req.ActorID {
+		return ErrForbidden
+	}
+
+	if err := s.repo.DeleteRoom(ctx, req.RoomID); err != nil {
+		if errors.Is(err, roomPostgres.ErrNotFound) {
+			return ErrRoomNotFound
+		}
+		return err
+	}
+
+	return nil
 }
 
 func generateInviteCode() string {

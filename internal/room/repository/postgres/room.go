@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -289,6 +290,14 @@ func (r *Repository) JoinRoom(ctx context.Context, roomID, actorID, displayName 
 		return nil, nil, fmt.Errorf("[%s]: add participant failed: %w", op, err)
 	}
 
+	_, err = tx.ExecContext(ctx, `
+    UPDATE rooms
+    SET updated_at = NOW()
+    WHERE id = $1`, roomID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: update updated_at failed: %w", op, err)
+	}
+
 	participants, err = r.listParticipantsTx(ctx, tx, roomID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("[%s]: list participants after insert failed: %w", op, err)
@@ -301,4 +310,206 @@ func (r *Repository) JoinRoom(ctx context.Context, roomID, actorID, displayName 
 	room.PlayersCount = len(participants)
 
 	return room, participants, nil
+}
+
+func (r *Repository) StartRoomWithMatch(ctx context.Context, roomID string, match *model.Match, players []model.MatchPlayer) (*model.Room, []model.RoomParticipant, error) {
+	const op = "room.repository.postgres.StartRoomWithMatch"
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: begin tx failed: %w", op, err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	room, err := r.getRoomByIDForUpdate(ctx, tx, roomID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: get room for update failed: %w", op, err)
+	}
+
+	if room.Status != model.RoomStatusWaiting {
+		return nil, nil, ErrRoomNotReady
+	}
+
+	participants, err := r.listParticipantsTx(ctx, tx, roomID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: list participants failed: %w", op, err)
+	}
+
+	if len(participants) < 2 {
+		return nil, nil, ErrNotEnoughPlayers
+	}
+
+	if len(participants) > room.MaxPlayers {
+		return nil, nil, ErrRoomFull
+	}
+
+	if err := r.createMatchTx(ctx, tx, match); err != nil {
+		return nil, nil, fmt.Errorf("[%s]: create match failed: %w", op, err)
+	}
+
+	if err := r.createMatchPlayersTx(ctx, tx, players); err != nil {
+		return nil, nil, fmt.Errorf("[%s]: create match players failed: %w", op, err)
+	}
+
+	query := `
+		UPDATE rooms
+		SET status = $2,
+		    updated_at = NOW()
+		WHERE id = $1
+		RETURNING updated_at
+	`
+
+	var updatedAt time.Time
+	if err := tx.QueryRowContext(ctx, query, roomID, model.RoomStatusPlaying).Scan(&updatedAt); err != nil {
+		return nil, nil, fmt.Errorf("[%s]: update room status failed: %w", op, err)
+	}
+
+	room.Status = model.RoomStatusPlaying
+	room.UpdatedAt = updatedAt
+	room.PlayersCount = len(participants)
+
+	if err := tx.Commit(); err != nil {
+		return nil, nil, fmt.Errorf("[%s]: commit failed: %w", op, err)
+	}
+
+	return room, participants, nil
+}
+
+func (r *Repository) FinishActiveMatch(ctx context.Context, roomID string, result model.JSONB) (*model.Match, []model.MatchPlayer, error) {
+	const op = "room.repository.postgres.FinishActiveMatch"
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: begin tx failed: %w", op, err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	room, err := r.getRoomByIDForUpdate(ctx, tx, roomID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: get room for update failed: %w", op, err)
+	}
+
+	match, err := r.getActiveMatchByRoomIDForUpdate(ctx, tx, roomID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: get active match failed: %w", op, err)
+	}
+
+	players, err := r.listMatchPlayersTx(ctx, tx, match.ID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: list match players failed: %w", op, err)
+	}
+
+	now := time.Now().UTC()
+	resultCopy := result
+
+	if err := r.updateMatchStateTx(ctx, tx, match.ID, match.GameState, model.MatchStatusFinished, &resultCopy); err != nil {
+		return nil, nil, fmt.Errorf("[%s]: update match failed: %w", op, err)
+	}
+
+	updatedAt, err := r.updateRoomStatusTx(ctx, tx, roomID, model.RoomStatusWaiting)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: update room status failed: %w", op, err)
+	}
+
+	match.Status = model.MatchStatusFinished
+	match.Result = &resultCopy
+	match.UpdatedAt = now
+
+	room.Status = model.RoomStatusWaiting
+	room.UpdatedAt = updatedAt
+	_ = room
+
+	if err := tx.Commit(); err != nil {
+		return nil, nil, fmt.Errorf("[%s]: commit failed: %w", op, err)
+	}
+
+	return match, players, nil
+}
+
+func (r *Repository) AbandonActiveMatch(ctx context.Context, roomID string, reason string) (*model.Match, []model.MatchPlayer, error) {
+	const op = "room.repository.postgres.AbandonActiveMatch"
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: begin tx failed: %w", op, err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	room, err := r.getRoomByIDForUpdate(ctx, tx, roomID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: get room for update failed: %w", op, err)
+	}
+
+	match, err := r.getActiveMatchByRoomIDForUpdate(ctx, tx, roomID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: get active match failed: %w", op, err)
+	}
+
+	players, err := r.listMatchPlayersTx(ctx, tx, match.ID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: list match players failed: %w", op, err)
+	}
+
+	resultJSON, err := json.Marshal(map[string]any{
+		"reason": reason,
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: marshal result failed: %w", op, err)
+	}
+	result := model.JSONB(resultJSON)
+
+	now := time.Now().UTC()
+
+	if err := r.updateMatchStateTx(ctx, tx, match.ID, match.GameState, model.MatchStatusAbandoned, &result); err != nil {
+		return nil, nil, fmt.Errorf("[%s]: update match failed: %w", op, err)
+	}
+
+	updatedAt, err := r.updateRoomStatusTx(ctx, tx, roomID, model.RoomStatusWaiting)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: update room status failed: %w", op, err)
+	}
+
+	match.Status = model.MatchStatusAbandoned
+	match.Result = &result
+	match.UpdatedAt = now
+
+	room.Status = model.RoomStatusWaiting
+	room.UpdatedAt = updatedAt
+	_ = room
+
+	if err := tx.Commit(); err != nil {
+		return nil, nil, fmt.Errorf("[%s]: commit failed: %w", op, err)
+	}
+
+	return match, players, nil
+}
+
+func (r *Repository) DeleteRoom(ctx context.Context, roomID string) error {
+	const op = "room.repository.postgres.DeleteRoom"
+
+	query := `
+		DELETE FROM rooms
+		WHERE id = $1
+	`
+
+	res, err := r.db.ExecContext(ctx, query, roomID)
+	if err != nil {
+		return fmt.Errorf("[%s]: exec failed: %w", op, err)
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("[%s]: rows affected failed: %w", op, err)
+	}
+	if rowsAffected == 0 {
+		return ErrNotFound
+	}
+
+	return nil
 }

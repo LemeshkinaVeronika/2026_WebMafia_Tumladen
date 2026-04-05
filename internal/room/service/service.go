@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-
 	"github.com/webmafia/tumladan/internal/model"
 )
 
@@ -18,6 +17,15 @@ type IRepository interface {
 
 	UpdateSettings(ctx context.Context, roomID, gameType string, maxPlayers int, settings model.JSONB) (*model.Room, []model.RoomParticipant, error)
 	UpdateStatus(ctx context.Context, roomID string, status model.RoomStatus) error
+
+	StartRoomWithMatch(ctx context.Context, roomID string, match *model.Match, players []model.MatchPlayer) (*model.Room, []model.RoomParticipant, error)
+
+	FinishActiveMatch(ctx context.Context, roomID string, result model.JSONB) (*model.Match, []model.MatchPlayer, error)
+	AbandonActiveMatch(ctx context.Context, roomID string, reason string) (*model.Match, []model.MatchPlayer, error)
+	DeleteRoom(ctx context.Context, roomID string) error
+
+	//FindStaleEmptyWaitingRooms(ctx context.Context, olderThan time.Time) ([]model.Room, error)
+	//FindStaleEmptyPlayingRooms(ctx context.Context, olderThan time.Time) ([]model.Room, error)
 }
 
 type Service struct {
