@@ -265,10 +265,6 @@ func (r *Repository) JoinRoom(ctx context.Context, roomID, actorID, displayName 
 		return nil, nil, fmt.Errorf("[%s]: get room for update failed: %w", op, err)
 	}
 
-	if room.Status != model.RoomStatusWaiting {
-		return nil, nil, ErrRoomNotJoinable
-	}
-
 	participants, err := r.listParticipantsTx(ctx, tx, roomID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("[%s]: list participants failed: %w", op, err)
@@ -280,6 +276,10 @@ func (r *Repository) JoinRoom(ctx context.Context, roomID, actorID, displayName 
 			alreadyInRoom = true
 			break
 		}
+	}
+
+	if room.Status != model.RoomStatusWaiting && !(room.Status == model.RoomStatusPlaying && alreadyInRoom) {
+		return nil, nil, ErrRoomNotJoinable
 	}
 
 	if !alreadyInRoom && len(participants) >= room.MaxPlayers {
@@ -512,4 +512,122 @@ func (r *Repository) DeleteRoom(ctx context.Context, roomID string) error {
 	}
 
 	return nil
+}
+
+func (r *Repository) FindStaleEmptyWaitingRooms(ctx context.Context, olderThan time.Time) ([]model.Room, error) {
+	const op = "room.repository.postgres.FindStaleEmptyWaitingRooms"
+
+	query := `
+		SELECT
+			r.id,
+			r.name,
+			r.is_private,
+			r.invite_code,
+			r.owner_actor_id,
+			r.status,
+			r.game_type,
+			r.max_players,
+			r.settings,
+			r.created_at,
+			r.updated_at
+		FROM rooms r
+		LEFT JOIN room_participants rp ON rp.room_id = r.id
+		WHERE r.status = 'waiting'
+		  AND rp.room_id IS NULL
+		  AND r.updated_at < $1
+		ORDER BY r.updated_at ASC
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, olderThan)
+	if err != nil {
+		return nil, fmt.Errorf("[%s]: query failed: %w", op, err)
+	}
+	defer rows.Close()
+
+	rooms := make([]model.Room, 0)
+	for rows.Next() {
+		var room model.Room
+		if err := rows.Scan(
+			&room.ID,
+			&room.Name,
+			&room.IsPrivate,
+			&room.InviteCode,
+			&room.OwnerActorID,
+			&room.Status,
+			&room.GameType,
+			&room.MaxPlayers,
+			&room.Settings,
+			&room.CreatedAt,
+			&room.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("[%s]: scan failed: %w", op, err)
+		}
+
+		rooms = append(rooms, room)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("[%s]: rows failed: %w", op, err)
+	}
+
+	return rooms, nil
+}
+
+func (r *Repository) FindStaleEmptyPlayingRooms(ctx context.Context, olderThan time.Time) ([]model.Room, error) {
+	const op = "room.repository.postgres.FindStaleEmptyPlayingRooms"
+
+	query := `
+		SELECT
+			r.id,
+			r.name,
+			r.is_private,
+			r.invite_code,
+			r.owner_actor_id,
+			r.status,
+			r.game_type,
+			r.max_players,
+			r.settings,
+			r.created_at,
+			r.updated_at
+		FROM rooms r
+		LEFT JOIN room_participants rp ON rp.room_id = r.id
+		WHERE r.status = 'playing'
+		  AND rp.room_id IS NULL
+		  AND r.updated_at < $1
+		ORDER BY r.updated_at ASC
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, olderThan)
+	if err != nil {
+		return nil, fmt.Errorf("[%s]: query failed: %w", op, err)
+	}
+	defer rows.Close()
+
+	rooms := make([]model.Room, 0)
+	for rows.Next() {
+		var room model.Room
+		if err := rows.Scan(
+			&room.ID,
+			&room.Name,
+			&room.IsPrivate,
+			&room.InviteCode,
+			&room.OwnerActorID,
+			&room.Status,
+			&room.GameType,
+			&room.MaxPlayers,
+			&room.Settings,
+			&room.CreatedAt,
+			&room.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("[%s]: scan failed: %w", op, err)
+		}
+
+		rooms = append(rooms, room)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("[%s]: rows failed: %w", op, err)
+	}
+
+	return rooms, nil
 }

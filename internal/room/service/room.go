@@ -373,6 +373,99 @@ func (s *Service) DeleteRoom(ctx context.Context, req dto.DeleteRoomRequest) err
 	return nil
 }
 
+func (s *Service) KickParticipant(ctx context.Context, req dto.KickParticipantRequest) (*dto.RoomResponse, error) {
+	room, err := s.repo.GetByID(ctx, req.RoomID)
+	if err != nil {
+		if errors.Is(err, roomPostgres.ErrNotFound) {
+			return nil, ErrRoomNotFound
+		}
+		return nil, err
+	}
+
+	if room.OwnerActorID != req.ActorID {
+		return nil, ErrForbidden
+	}
+
+	if room.Status != model.RoomStatusWaiting {
+		return nil, ErrRoomModerationLocked
+	}
+
+	if req.TargetActorID == req.ActorID {
+		return nil, ErrCannotKickYourself
+	}
+
+	participants, err := s.repo.ListParticipants(ctx, req.RoomID)
+	if err != nil {
+		return nil, err
+	}
+
+	found := false
+	for _, participant := range participants {
+		if participant.ActorID == req.TargetActorID {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return nil, ErrParticipantNotFound
+	}
+
+	if err := s.repo.KickParticipant(ctx, req.RoomID, req.TargetActorID); err != nil {
+		if errors.Is(err, roomPostgres.ErrNotFound) {
+			return nil, ErrRoomNotFound
+		}
+		return nil, err
+	}
+
+	participants, err = s.repo.ListParticipants(ctx, req.RoomID)
+	if err != nil {
+		return nil, err
+	}
+
+	room.PlayersCount = len(participants)
+
+	resp := roomWithParticipantsToResponse(*room, participants)
+	return &resp, nil
+}
+
+func (s *Service) CleanupStaleRooms(ctx context.Context, waitingTTL, playingTTL time.Duration) error {
+	now := time.Now().UTC()
+
+	waitingCutoff := now.Add(-waitingTTL)
+	playingCutoff := now.Add(-playingTTL)
+
+	playingRooms, err := s.repo.FindStaleEmptyPlayingRooms(ctx, playingCutoff)
+	if err != nil {
+		return err
+	}
+
+	for _, room := range playingRooms {
+		if err := s.AbandonRoomMatch(ctx, room.ID, "reconnect_timeout"); err != nil {
+			if errors.Is(err, ErrActiveMatchNotFound) {
+				continue
+			}
+			return err
+		}
+	}
+
+	waitingRooms, err := s.repo.FindStaleEmptyWaitingRooms(ctx, waitingCutoff)
+	if err != nil {
+		return err
+	}
+
+	for _, room := range waitingRooms {
+		if err := s.repo.DeleteRoom(ctx, room.ID); err != nil {
+			if errors.Is(err, roomPostgres.ErrNotFound) {
+				continue
+			}
+			return err
+		}
+	}
+
+	return nil
+}
+
 func generateInviteCode() string {
 	return strings.ToUpper(uuid.NewString()[:8])
 }

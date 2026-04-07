@@ -168,10 +168,7 @@ func (s *Service) ApplyAction(ctx context.Context, req dto.ApplyMatchActionReque
 	return &resp, nil
 }
 
-func applyCarcassonneAction(
-	rawState model.JSONB,
-	req dto.ApplyMatchActionRequest,
-) (model.JSONB, model.MatchStatus, *model.JSONB, error) {
+func applyCarcassonneAction(rawState model.JSONB, req dto.ApplyMatchActionRequest) (model.JSONB, model.MatchStatus, *model.JSONB, error) {
 	var state CarcassonneGameState
 	if err := json.Unmarshal(rawState, &state); err != nil {
 		return nil, model.MatchStatusActive, nil, ErrInvalidMatchAction
@@ -185,11 +182,7 @@ func applyCarcassonneAction(
 	}
 }
 
-// TODO: не забыть убрать заглушку
-func applyCarcassonneAdvanceTurn(
-	state CarcassonneGameState,
-	actorID string,
-) (model.JSONB, model.MatchStatus, *model.JSONB, error) {
+func applyCarcassonneAdvanceTurn(state CarcassonneGameState, actorID string) (model.JSONB, model.MatchStatus, *model.JSONB, error) {
 	if len(state.Players) == 0 {
 		return nil, model.MatchStatusActive, nil, ErrInvalidMatchAction
 	}

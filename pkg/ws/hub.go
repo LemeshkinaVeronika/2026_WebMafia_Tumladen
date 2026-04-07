@@ -12,21 +12,28 @@ type leaveRequest struct {
 	roomID string
 }
 
+type disconnectActorRequest struct {
+	roomID  string
+	actorID string
+}
+
 type Hub struct {
-	rooms      map[string]map[*Client]bool
-	broadcast  chan Message
-	register   chan *Client
-	unregister chan *Client
-	leave      chan leaveRequest
+	rooms           map[string]map[*Client]bool
+	broadcast       chan Message
+	register        chan *Client
+	unregister      chan *Client
+	leave           chan leaveRequest
+	disconnectActor chan disconnectActorRequest
 }
 
 func NewHub() *Hub {
 	return &Hub{
-		broadcast:  make(chan Message),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		leave:      make(chan leaveRequest),
-		rooms:      make(map[string]map[*Client]bool),
+		broadcast:       make(chan Message),
+		register:        make(chan *Client),
+		unregister:      make(chan *Client),
+		leave:           make(chan leaveRequest),
+		disconnectActor: make(chan disconnectActorRequest),
+		rooms:           make(map[string]map[*Client]bool),
 	}
 }
 
@@ -83,6 +90,26 @@ func (h *Hub) Run(ctx context.Context) {
 				}
 			}
 
+		case req := <-h.disconnectActor:
+			if req.roomID == "" || req.actorID == "" {
+				continue
+			}
+
+			if clients, ok := h.rooms[req.roomID]; ok {
+				for client := range clients {
+					if client.ActorID() != req.actorID {
+						continue
+					}
+
+					delete(clients, client)
+					close(client.send)
+				}
+
+				if len(clients) == 0 {
+					delete(h.rooms, req.roomID)
+				}
+			}
+
 		case message := <-h.broadcast:
 			if clients, ok := h.rooms[message.RoomID]; ok {
 				for client := range clients {
@@ -114,6 +141,13 @@ func (h *Hub) Leave(client *Client, roomID string) {
 	h.leave <- leaveRequest{
 		client: client,
 		roomID: roomID,
+	}
+}
+
+func (h *Hub) DisconnectActor(roomID, actorID string) {
+	h.disconnectActor <- disconnectActorRequest{
+		roomID:  roomID,
+		actorID: actorID,
 	}
 }
 

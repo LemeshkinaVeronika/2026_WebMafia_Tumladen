@@ -95,3 +95,40 @@ func (r *Repository) ListParticipants(ctx context.Context, roomID string) ([]mod
 
 	return participants, nil
 }
+
+func (r *Repository) KickParticipant(ctx context.Context, roomID, targetActorID string) error {
+	const op = "room.repository.postgres.KickParticipant"
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("[%s]: begin tx failed: %w", op, err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	deleteQuery := `
+		DELETE FROM room_participants
+		WHERE room_id = $1 AND actor_id = $2
+	`
+
+	if _, err := tx.ExecContext(ctx, deleteQuery, roomID, targetActorID); err != nil {
+		return fmt.Errorf("[%s]: delete participant failed: %w", op, err)
+	}
+
+	updateQuery := `
+		UPDATE rooms
+		SET updated_at = NOW()
+		WHERE id = $1
+	`
+
+	if _, err := tx.ExecContext(ctx, updateQuery, roomID); err != nil {
+		return fmt.Errorf("[%s]: update room timestamp failed: %w", op, err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("[%s]: commit failed: %w", op, err)
+	}
+
+	return nil
+}

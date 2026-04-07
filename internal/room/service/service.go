@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"github.com/webmafia/tumladan/internal/model"
+	"time"
 )
 
 type IRepository interface {
@@ -24,8 +25,10 @@ type IRepository interface {
 	AbandonActiveMatch(ctx context.Context, roomID string, reason string) (*model.Match, []model.MatchPlayer, error)
 	DeleteRoom(ctx context.Context, roomID string) error
 
-	//FindStaleEmptyWaitingRooms(ctx context.Context, olderThan time.Time) ([]model.Room, error)
-	//FindStaleEmptyPlayingRooms(ctx context.Context, olderThan time.Time) ([]model.Room, error)
+	KickParticipant(ctx context.Context, roomID, targetActorID string) error
+
+	FindStaleEmptyWaitingRooms(ctx context.Context, olderThan time.Time) ([]model.Room, error)
+	FindStaleEmptyPlayingRooms(ctx context.Context, olderThan time.Time) ([]model.Room, error)
 }
 
 type Service struct {

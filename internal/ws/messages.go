@@ -57,3 +57,8 @@ type AbandonRoomMatchPayload struct {
 	RoomID string `json:"roomId"`
 	Reason string `json:"reason,omitempty"`
 }
+
+type KickParticipantPayload struct {
+	RoomID        string `json:"roomId"`
+	TargetActorID string `json:"targetActorId"`
+}

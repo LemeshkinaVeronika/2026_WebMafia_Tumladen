@@ -86,3 +86,8 @@ type DeleteRoomRequest struct {
 	ActorID string `json:"actorId"`
 	RoomID  string `json:"roomId"`
 }
+type KickParticipantRequest struct {
+	ActorID       string `json:"actorId"`
+	RoomID        string `json:"roomId"`
+	TargetActorID string `json:"targetActorId"`
+}

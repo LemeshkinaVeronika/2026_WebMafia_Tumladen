@@ -134,6 +134,9 @@ func (h *MessageHandler) HandleMessage(ctx context.Context, client *pkgws.Client
 	case "abandon_room_match":
 		h.handleAbandonRoomMatch(ctx, client, msg.Payload)
 
+	case "kick_participant":
+		h.handleKickParticipant(ctx, client, msg.Payload)
+
 	default:
 		writeJSON(client, ServerMessage{
 			Type: "error",
@@ -150,12 +153,21 @@ func (h *MessageHandler) OnDisconnect(ctx context.Context, client *pkgws.Client)
 		return
 	}
 
+	roomState, err := h.roomService.GetRoomState(ctx, roomID)
+	if err != nil {
+		return
+	}
+
+	if roomState.Status == string(model.RoomStatusPlaying) {
+		return
+	}
+
 	_ = h.roomService.LeaveRoom(ctx, roomDTO.LeaveRoomRequest{
 		ActorID: client.ActorID(),
 		RoomID:  roomID,
 	})
 
-	roomState, err := h.roomService.GetRoomState(ctx, roomID)
+	roomState, err = h.roomService.GetRoomState(ctx, roomID)
 	if err != nil {
 		return
 	}
@@ -187,6 +199,53 @@ func (h *MessageHandler) handleJoinRoom(ctx context.Context, client *pkgws.Clien
 	}
 
 	previousRoomID := client.RoomID()
+	leftPreviousRoom := false
+
+	if previousRoomID != "" && previousRoomID != p.RoomID {
+		previousRoomState, err := h.roomService.GetRoomState(ctx, previousRoomID)
+		if err != nil {
+			writeJSON(client, ServerMessage{
+				Type: "error",
+				Payload: ErrorPayload{
+					Message: "failed to load previous room",
+				},
+			})
+			return
+		}
+
+		if previousRoomState.Status == string(model.RoomStatusPlaying) {
+			writeJSON(client, ServerMessage{
+				Type: "error",
+				Payload: ErrorPayload{
+					Message: "cannot switch rooms during active match",
+				},
+			})
+			return
+		}
+
+		if err := h.roomService.LeaveRoom(ctx, roomDTO.LeaveRoomRequest{
+			ActorID: client.ActorID(),
+			RoomID:  previousRoomID,
+		}); err != nil {
+			writeJSON(client, ServerMessage{
+				Type: "error",
+				Payload: ErrorPayload{
+					Message: "failed to leave previous room",
+				},
+			})
+			return
+		}
+
+		leftPreviousRoom = true
+		h.hub.Leave(client, previousRoomID)
+		client.SetRoomID("")
+
+		previousRoomState, err = h.roomService.GetRoomState(ctx, previousRoomID)
+		if err == nil {
+			h.broadcastRoomState(previousRoomID, previousRoomState)
+		}
+	}
+
 	roomState, err := h.roomService.JoinRoom(ctx, roomDTO.JoinRoomRequest{
 		Actor: roomDTO.ActorRequest{
 			ID:          client.ActorID(),
@@ -196,6 +255,22 @@ func (h *MessageHandler) handleJoinRoom(ctx context.Context, client *pkgws.Clien
 		RoomID: p.RoomID,
 	})
 	if err != nil {
+		if leftPreviousRoom {
+			rollbackRoomState, rollbackErr := h.roomService.JoinRoom(ctx, roomDTO.JoinRoomRequest{
+				Actor: roomDTO.ActorRequest{
+					ID:          client.ActorID(),
+					Type:        string(client.Actor().Type),
+					DisplayName: client.Actor().DisplayName,
+				},
+				RoomID: previousRoomID,
+			})
+			if rollbackErr == nil {
+				client.SetRoomID(previousRoomID)
+				h.hub.Register(client)
+				h.broadcastRoomState(previousRoomID, rollbackRoomState)
+			}
+		}
+
 		message := "failed to join room"
 		switch {
 		case errors.Is(err, roomService.ErrRoomFull):
@@ -213,28 +288,6 @@ func (h *MessageHandler) handleJoinRoom(ctx context.Context, client *pkgws.Clien
 			},
 		})
 		return
-	}
-
-	if previousRoomID != "" && previousRoomID != p.RoomID {
-		if err := h.roomService.LeaveRoom(ctx, roomDTO.LeaveRoomRequest{
-			ActorID: client.ActorID(),
-			RoomID:  previousRoomID,
-		}); err != nil {
-			writeJSON(client, ServerMessage{
-				Type: "error",
-				Payload: ErrorPayload{
-					Message: "failed to leave previous room",
-				},
-			})
-			return
-		}
-
-		h.hub.Leave(client, previousRoomID)
-
-		previousRoomState, err := h.roomService.GetRoomState(ctx, previousRoomID)
-		if err == nil {
-			h.broadcastRoomState(previousRoomID, previousRoomState)
-		}
 	}
 
 	client.SetRoomID(p.RoomID)
@@ -695,4 +748,60 @@ func (h *MessageHandler) handleAbandonRoomMatch(ctx context.Context, client *pkg
 	if err == nil {
 		h.broadcastMatchEvent(p.RoomID, "match_abandoned", matchState)
 	}
+}
+
+func (h *MessageHandler) handleKickParticipant(ctx context.Context, client *pkgws.Client, payload any) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		writeJSON(client, ServerMessage{
+			Type: "error",
+			Payload: ErrorPayload{
+				Message: "invalid payload",
+			},
+		})
+		return
+	}
+
+	var p KickParticipantPayload
+	if err := json.Unmarshal(raw, &p); err != nil || p.RoomID == "" || p.TargetActorID == "" {
+		writeJSON(client, ServerMessage{
+			Type: "error",
+			Payload: ErrorPayload{
+				Message: "invalid kick participant payload",
+			},
+		})
+		return
+	}
+
+	roomState, err := h.roomService.KickParticipant(ctx, roomDTO.KickParticipantRequest{
+		ActorID:       client.ActorID(),
+		RoomID:        p.RoomID,
+		TargetActorID: p.TargetActorID,
+	})
+	if err != nil {
+		message := "failed to kick participant"
+		switch {
+		case errors.Is(err, roomService.ErrForbidden):
+			message = "forbidden"
+		case errors.Is(err, roomService.ErrRoomNotFound):
+			message = "room not found"
+		case errors.Is(err, roomService.ErrParticipantNotFound):
+			message = "participant not found"
+		case errors.Is(err, roomService.ErrCannotKickYourself):
+			message = "cannot kick yourself"
+		case errors.Is(err, roomService.ErrRoomModerationLocked):
+			message = "room moderation is locked"
+		}
+
+		writeJSON(client, ServerMessage{
+			Type: "error",
+			Payload: ErrorPayload{
+				Message: message,
+			},
+		})
+		return
+	}
+
+	h.hub.DisconnectActor(p.RoomID, p.TargetActorID)
+	h.broadcastRoomState(p.RoomID, roomState)
 }
