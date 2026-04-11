@@ -7,22 +7,22 @@ import (
 	matchDTO "github.com/webmafia/tumladan/internal/match/dto"
 	matchService "github.com/webmafia/tumladan/internal/match/service"
 	roomDTO "github.com/webmafia/tumladan/internal/room/dto"
+	wsticket "github.com/webmafia/tumladan/internal/ws_ticket/service"
 	"net/http"
 
 	"github.com/gorilla/websocket"
 	"github.com/webmafia/tumladan/internal/model"
 	roomService "github.com/webmafia/tumladan/internal/room/service"
-	jwtprovider "github.com/webmafia/tumladan/pkg/jwt"
 	pkgws "github.com/webmafia/tumladan/pkg/ws"
 )
 
 type Handler struct {
-	roomService  *roomService.Service
-	matchService *matchService.Service
-	jwtProvider  *jwtprovider.JWTProvider
-	hub          *pkgws.Hub
-	upgrader     websocket.Upgrader
-	wsConfig     pkgws.Config
+	roomService   *roomService.Service
+	matchService  *matchService.Service
+	ticketService *wsticket.Service
+	hub           *pkgws.Hub
+	upgrader      websocket.Upgrader
+	wsConfig      pkgws.Config
 }
 
 type MessageHandler struct {
@@ -34,50 +34,41 @@ type MessageHandler struct {
 func NewHandler(
 	roomService *roomService.Service,
 	matchService *matchService.Service,
-	jwtProvider *jwtprovider.JWTProvider,
+	ticketService *wsticket.Service,
 	hub *pkgws.Hub,
 	wsConfig pkgws.Config,
 ) *Handler {
 	return &Handler{
-		roomService:  roomService,
-		matchService: matchService,
-		jwtProvider:  jwtProvider,
-		hub:          hub,
-		upgrader:     pkgws.NewUpgrader(wsConfig),
-		wsConfig:     wsConfig,
+		roomService:   roomService,
+		matchService:  matchService,
+		ticketService: ticketService,
+		hub:           hub,
+		upgrader:      pkgws.NewUpgrader(wsConfig),
+		wsConfig:      wsConfig,
 	}
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	tokenStr := r.URL.Query().Get("token")
-	if tokenStr == "" {
-		http.Error(w, "missing token", http.StatusUnauthorized)
+	ticketValue := r.URL.Query().Get("ticket")
+	if ticketValue == "" {
+		http.Error(w, "missing ticket", http.StatusUnauthorized)
 		return
 	}
 
-	claims, err := h.jwtProvider.ParseToken(tokenStr)
+	authSession, err := h.ticketService.Reserve(ticketValue)
 	if err != nil {
-		http.Error(w, "invalid token", http.StatusUnauthorized)
+		http.Error(w, "invalid ticket", http.StatusUnauthorized)
 		return
-	}
-
-	actorID := claims.ActorID
-	if actorID == "" {
-		actorID = claims.RegisteredClaims.Subject
-	}
-	if actorID == "" {
-		http.Error(w, "invalid token", http.StatusUnauthorized)
-		return
-	}
-
-	actor := model.Actor{
-		ID:          actorID,
-		Type:        model.ActorType(claims.ActorType),
-		DisplayName: claims.DisplayName,
 	}
 
 	conn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
+		h.ticketService.Release(ticketValue)
+		return
+	}
+
+	if err := h.ticketService.Commit(ticketValue); err != nil {
+		_ = conn.Close()
 		return
 	}
 
@@ -87,14 +78,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		hub:          h.hub,
 	}
 
-	client := pkgws.NewClient(
-		actor,
-		h.hub,
-		conn,
-		nil,
-		messageHandler,
-		h.wsConfig,
-	)
+	client := pkgws.NewClient(authSession.Actor, h.hub, conn, nil, messageHandler, h.wsConfig)
 
 	go client.WritePump()
 	client.ReadPump(r.Context())
@@ -159,6 +143,9 @@ func (h *MessageHandler) OnDisconnect(ctx context.Context, client *pkgws.Client)
 	}
 
 	if roomState.Status == string(model.RoomStatusPlaying) {
+		if h.hub.IsRoomEmpty(roomID) {
+			_ = h.roomService.MarkRoomEmpty(ctx, roomID)
+		}
 		return
 	}
 

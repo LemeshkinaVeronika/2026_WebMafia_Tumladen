@@ -7,6 +7,8 @@ import (
 	matchPostgres "github.com/webmafia/tumladan/internal/match/repository/postgres"
 	matchService "github.com/webmafia/tumladan/internal/match/service"
 	internalws "github.com/webmafia/tumladan/internal/ws"
+	wsticketService "github.com/webmafia/tumladan/internal/ws_ticket/service"
+	wsticketStore "github.com/webmafia/tumladan/internal/ws_ticket/store"
 	"log/slog"
 	"net/http"
 	"os"
@@ -22,18 +24,20 @@ import (
 	roomPostgres "github.com/webmafia/tumladan/internal/room/repository/postgres"
 	roomService "github.com/webmafia/tumladan/internal/room/service"
 	"github.com/webmafia/tumladan/internal/router"
+	wsticketHTTP "github.com/webmafia/tumladan/internal/ws_ticket/delivery/http"
 	jwtprovider "github.com/webmafia/tumladan/pkg/jwt"
 	"github.com/webmafia/tumladan/pkg/postgres"
 	pkgws "github.com/webmafia/tumladan/pkg/ws"
 )
 
 type App struct {
-	cfg    *Config
-	logger *slog.Logger
-	server *http.Server
-	db     *sql.DB
-	ctx    context.Context
-	stop   context.CancelFunc
+	cfg     *Config
+	logger  *slog.Logger
+	server  *http.Server
+	db      *sql.DB
+	ctx     context.Context
+	stop    context.CancelFunc
+	roomSvc *roomService.Service
 }
 
 func New(ctx context.Context) (*App, error) {
@@ -67,18 +71,23 @@ func New(ctx context.Context) (*App, error) {
 	matchRepo := matchPostgres.New(db)
 	matchSvc := matchService.New(matchRepo)
 
+	wsTicketStore := wsticketStore.NewStore(1 * time.Minute)
+	wsTicketSvc := wsticketService.NewService(wsTicketStore)
+	wsTicketHandler := wsticketHTTP.NewHandler(wsTicketSvc)
+
 	wsConfig := pkgws.NewDefaultConfig()
 	wsConfig.AllowedOrigins = cfg.CORS.AllowedOrigins
 	hub := pkgws.NewHub()
 	go hub.Run(ctx)
 
-	wsHandler := internalws.NewHandler(roomSvc, matchSvc, jwtProvider, hub, wsConfig)
+	wsHandler := internalws.NewHandler(roomSvc, matchSvc, wsTicketSvc, hub, wsConfig)
 
 	r := router.NewRouter(
 		router.AppHandlers{
-			GuestHandler: guestHandler,
-			RoomHandler:  roomHandler,
-			WSHandler:    wsHandler,
+			GuestHandler:    guestHandler,
+			RoomHandler:     roomHandler,
+			WSHandler:       wsHandler,
+			WSTicketHandler: wsTicketHandler,
 		},
 		healthHandler(logger, db),
 		authMiddleware,
@@ -92,12 +101,13 @@ func New(ctx context.Context) (*App, error) {
 	}
 
 	return &App{
-		cfg:    cfg,
-		logger: logger,
-		server: server,
-		db:     db,
-		ctx:    ctx,
-		stop:   stop,
+		cfg:     cfg,
+		logger:  logger,
+		server:  server,
+		db:      db,
+		ctx:     ctx,
+		stop:    stop,
+		roomSvc: roomSvc,
 	}, nil
 }
 
@@ -120,6 +130,8 @@ func (a *App) Run() error {
 		close(serverErrCh)
 	}()
 
+	go a.runRoomCleanup()
+
 	select {
 	case <-a.ctx.Done():
 		a.logger.Info("shutdown signal received")
@@ -139,6 +151,22 @@ func (a *App) Run() error {
 
 	a.logger.Info("server stopped")
 	return nil
+}
+
+func (a *App) runRoomCleanup() {
+	ticker := time.NewTicker(a.cfg.RoomCleanupInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-a.ctx.Done():
+			return
+		case <-ticker.C:
+			if err := a.roomSvc.CleanupStaleRooms(a.ctx, a.cfg.RoomWaitingCleanupTTL, a.cfg.RoomPlayingCleanupTTL); err != nil {
+				a.logger.Error("room cleanup failed", "error", err)
+			}
+		}
+	}
 }
 
 func newLogger(cfg *Config) *slog.Logger {

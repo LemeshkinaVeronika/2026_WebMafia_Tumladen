@@ -1,6 +1,9 @@
 package ws
 
-import "context"
+import (
+	"context"
+	"sync"
+)
 
 type Message struct {
 	RoomID string
@@ -19,6 +22,7 @@ type disconnectActorRequest struct {
 
 type Hub struct {
 	rooms           map[string]map[*Client]bool
+	mu              sync.RWMutex
 	broadcast       chan Message
 	register        chan *Client
 	unregister      chan *Client
@@ -39,6 +43,9 @@ func NewHub() *Hub {
 
 func (h *Hub) Run(ctx context.Context) {
 	defer func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+
 		for _, clients := range h.rooms {
 			for client := range clients {
 				close(client.send)
@@ -56,10 +63,12 @@ func (h *Hub) Run(ctx context.Context) {
 				continue
 			}
 
+			h.mu.Lock()
 			if h.rooms[client.RoomID()] == nil {
 				h.rooms[client.RoomID()] = make(map[*Client]bool)
 			}
 			h.rooms[client.RoomID()][client] = true
+			h.mu.Unlock()
 
 		case client := <-h.unregister:
 			roomID := client.RoomID()
@@ -67,6 +76,7 @@ func (h *Hub) Run(ctx context.Context) {
 				continue
 			}
 
+			h.mu.Lock()
 			if clients, ok := h.rooms[roomID]; ok {
 				if _, ok := clients[client]; ok {
 					delete(clients, client)
@@ -77,24 +87,28 @@ func (h *Hub) Run(ctx context.Context) {
 					}
 				}
 			}
+			h.mu.Unlock()
 
 		case req := <-h.leave:
 			if req.roomID == "" {
 				continue
 			}
 
+			h.mu.Lock()
 			if clients, ok := h.rooms[req.roomID]; ok {
 				delete(clients, req.client)
 				if len(clients) == 0 {
 					delete(h.rooms, req.roomID)
 				}
 			}
+			h.mu.Unlock()
 
 		case req := <-h.disconnectActor:
 			if req.roomID == "" || req.actorID == "" {
 				continue
 			}
 
+			h.mu.Lock()
 			if clients, ok := h.rooms[req.roomID]; ok {
 				for client := range clients {
 					if client.ActorID() != req.actorID {
@@ -109,8 +123,10 @@ func (h *Hub) Run(ctx context.Context) {
 					delete(h.rooms, req.roomID)
 				}
 			}
+			h.mu.Unlock()
 
 		case message := <-h.broadcast:
+			h.mu.Lock()
 			if clients, ok := h.rooms[message.RoomID]; ok {
 				for client := range clients {
 					select {
@@ -125,6 +141,7 @@ func (h *Hub) Run(ctx context.Context) {
 					}
 				}
 			}
+			h.mu.Unlock()
 		}
 	}
 }
@@ -156,4 +173,20 @@ func (h *Hub) BroadcastTo(roomID string, data []byte) {
 		RoomID: roomID,
 		Data:   data,
 	}
+}
+
+func (h *Hub) RoomClientCount(roomID string) int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	clients, ok := h.rooms[roomID]
+	if !ok {
+		return 0
+	}
+
+	return len(clients)
+}
+
+func (h *Hub) IsRoomEmpty(roomID string) bool {
+	return h.RoomClientCount(roomID) == 0
 }

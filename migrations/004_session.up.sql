@@ -1,0 +1,5 @@
+ALTER TABLE guest_sessions
+    ADD COLUMN IF NOT EXISTS session_id UUID UNIQUE;
+
+ALTER TABLE rooms
+    ADD COLUMN IF NOT EXISTS last_empty_at TIMESTAMPTZ;

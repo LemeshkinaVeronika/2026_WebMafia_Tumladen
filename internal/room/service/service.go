@@ -29,6 +29,8 @@ type IRepository interface {
 
 	FindStaleEmptyWaitingRooms(ctx context.Context, olderThan time.Time) ([]model.Room, error)
 	FindStaleEmptyPlayingRooms(ctx context.Context, olderThan time.Time) ([]model.Room, error)
+
+	MarkRoomEmpty(ctx context.Context, roomID string) error
 }
 
 type Service struct {

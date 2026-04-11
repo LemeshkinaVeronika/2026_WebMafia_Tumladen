@@ -46,7 +46,15 @@ func (r *Repository) RemoveParticipant(ctx context.Context, roomID, actorID stri
 
 	_, err = tx.ExecContext(ctx, `
 		UPDATE rooms
-		SET updated_at = NOW()
+		SET updated_at = NOW(),
+			last_empty_at = CASE
+				WHEN EXISTS (
+					SELECT 1
+					FROM room_participants
+					WHERE room_id = $1
+				) THEN NULL
+				ELSE NOW()
+			END
 		WHERE id = $1`, roomID)
 	if err != nil {
 		return fmt.Errorf("[%s]: update updated_at failed: %w", op, err)
@@ -118,7 +126,15 @@ func (r *Repository) KickParticipant(ctx context.Context, roomID, targetActorID 
 
 	updateQuery := `
 		UPDATE rooms
-		SET updated_at = NOW()
+		SET updated_at = NOW(),
+			last_empty_at = CASE
+				WHEN EXISTS (
+					SELECT 1
+					FROM room_participants
+					WHERE room_id = $1
+				) THEN NULL
+				ELSE NOW()
+			END
 		WHERE id = $1
 	`
 

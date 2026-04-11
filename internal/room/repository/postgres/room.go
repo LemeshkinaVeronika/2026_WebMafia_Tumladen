@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -14,9 +15,9 @@ func (r *Repository) Create(ctx context.Context, room *model.Room) error {
 
 	query := `
 		INSERT INTO rooms (
-			id, name, is_private, invite_code, owner_actor_id, status, game_type, max_players, settings, created_at, updated_at
+			id, name, is_private, invite_code, owner_actor_id, status, game_type, max_players, settings, last_empty_at, created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	`
 
 	_, err := r.db.ExecContext(
@@ -31,6 +32,7 @@ func (r *Repository) Create(ctx context.Context, room *model.Room) error {
 		room.GameType,
 		room.MaxPlayers,
 		room.Settings,
+		room.LastEmptyAt,
 		room.CreatedAt,
 		room.UpdatedAt,
 	)
@@ -56,6 +58,7 @@ func (r *Repository) ListPublic(ctx context.Context) ([]model.Room, error) {
 			r.max_players,
 			COUNT(rp.actor_id) AS players_count,
 			r.settings,
+			r.last_empty_at,
 			r.created_at,
 			r.updated_at
 		FROM rooms r
@@ -63,7 +66,7 @@ func (r *Repository) ListPublic(ctx context.Context) ([]model.Room, error) {
 		WHERE r.is_private = FALSE
 		GROUP BY
 			r.id, r.name, r.is_private, r.invite_code, r.owner_actor_id,
-			r.status, r.game_type, r.max_players, r.settings, r.created_at, r.updated_at
+			r.status, r.game_type, r.max_players, r.settings, r.last_empty_at, r.created_at, r.updated_at
 		ORDER BY r.created_at DESC
 	`
 
@@ -87,6 +90,7 @@ func (r *Repository) ListPublic(ctx context.Context) ([]model.Room, error) {
 			&room.MaxPlayers,
 			&room.PlayersCount,
 			&room.Settings,
+			&room.LastEmptyAt,
 			&room.CreatedAt,
 			&room.UpdatedAt,
 		); err != nil {
@@ -107,7 +111,7 @@ func (r *Repository) GetByInviteCode(ctx context.Context, inviteCode string) (*m
 	const op = "room.repository.postgres.GetByInviteCode"
 
 	query := `
-		SELECT id, name, is_private, invite_code, owner_actor_id, status, game_type, max_players, settings, created_at, updated_at
+		SELECT id, name, is_private, invite_code, owner_actor_id, status, game_type, max_players, settings, last_empty_at, created_at, updated_at
 		FROM rooms
 		WHERE invite_code = $1
 		LIMIT 1
@@ -124,6 +128,7 @@ func (r *Repository) GetByInviteCode(ctx context.Context, inviteCode string) (*m
 		&room.GameType,
 		&room.MaxPlayers,
 		&room.Settings,
+		&room.LastEmptyAt,
 		&room.CreatedAt,
 		&room.UpdatedAt,
 	)
@@ -138,7 +143,7 @@ func (r *Repository) GetByID(ctx context.Context, roomID string) (*model.Room, e
 	const op = "room.repository.postgres.GetByID"
 
 	query := `
-		SELECT id, name, is_private, invite_code, owner_actor_id, status, game_type, max_players, settings, created_at, updated_at
+		SELECT id, name, is_private, invite_code, owner_actor_id, status, game_type, max_players, settings, last_empty_at, created_at, updated_at
 		FROM rooms
 		WHERE id = $1
 		LIMIT 1
@@ -155,6 +160,7 @@ func (r *Repository) GetByID(ctx context.Context, roomID string) (*model.Room, e
 		&room.GameType,
 		&room.MaxPlayers,
 		&room.Settings,
+		&room.LastEmptyAt,
 		&room.CreatedAt,
 		&room.UpdatedAt,
 	)
@@ -294,7 +300,8 @@ func (r *Repository) JoinRoom(ctx context.Context, roomID, actorID, displayName 
 
 	_, err = tx.ExecContext(ctx, `
     UPDATE rooms
-    SET updated_at = NOW()
+    SET updated_at = NOW(),
+     last_empty_at = NULL
     WHERE id = $1`, roomID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("[%s]: update updated_at failed: %w", op, err)
@@ -498,6 +505,7 @@ func (r *Repository) DeleteRoom(ctx context.Context, roomID string) error {
 	query := `
 		DELETE FROM rooms
 		WHERE id = $1
+		  AND status != 'playing'
 	`
 
 	res, err := r.db.ExecContext(ctx, query, roomID)
@@ -510,7 +518,17 @@ func (r *Repository) DeleteRoom(ctx context.Context, roomID string) error {
 		return fmt.Errorf("[%s]: rows affected failed: %w", op, err)
 	}
 	if rowsAffected == 0 {
-		return ErrNotFound
+		room, getErr := r.GetByID(ctx, roomID)
+		switch {
+		case getErr == nil && room.Status == model.RoomStatusPlaying:
+			return ErrForbiddenDeleteActiveRoom
+		case getErr == nil:
+			return ErrNotFound
+		case errors.Is(getErr, ErrNotFound):
+			return ErrNotFound
+		default:
+			return fmt.Errorf("[%s]: check room state failed: %w", op, getErr)
+		}
 	}
 
 	return nil
@@ -530,14 +548,16 @@ func (r *Repository) FindStaleEmptyWaitingRooms(ctx context.Context, olderThan t
 			r.game_type,
 			r.max_players,
 			r.settings,
+			r.last_empty_at,
 			r.created_at,
 			r.updated_at
 		FROM rooms r
 		LEFT JOIN room_participants rp ON rp.room_id = r.id
 		WHERE r.status = 'waiting'
 		  AND rp.room_id IS NULL
-		  AND r.updated_at < $1
-		ORDER BY r.updated_at ASC
+		  AND r.last_empty_at IS NOT NULL
+		  AND r.last_empty_at < $1
+		ORDER BY r.last_empty_at ASC
 	`
 
 	rows, err := r.db.QueryContext(ctx, query, olderThan)
@@ -559,6 +579,7 @@ func (r *Repository) FindStaleEmptyWaitingRooms(ctx context.Context, olderThan t
 			&room.GameType,
 			&room.MaxPlayers,
 			&room.Settings,
+			&room.LastEmptyAt,
 			&room.CreatedAt,
 			&room.UpdatedAt,
 		); err != nil {
@@ -589,14 +610,14 @@ func (r *Repository) FindStaleEmptyPlayingRooms(ctx context.Context, olderThan t
 			r.game_type,
 			r.max_players,
 			r.settings,
+			r.last_empty_at,
 			r.created_at,
 			r.updated_at
 		FROM rooms r
-		LEFT JOIN room_participants rp ON rp.room_id = r.id
 		WHERE r.status = 'playing'
-		  AND rp.room_id IS NULL
-		  AND r.updated_at < $1
-		ORDER BY r.updated_at ASC
+		  AND r.last_empty_at IS NOT NULL
+		  AND r.last_empty_at < $1
+		ORDER BY r.last_empty_at ASC
 	`
 
 	rows, err := r.db.QueryContext(ctx, query, olderThan)
@@ -618,6 +639,7 @@ func (r *Repository) FindStaleEmptyPlayingRooms(ctx context.Context, olderThan t
 			&room.GameType,
 			&room.MaxPlayers,
 			&room.Settings,
+			&room.LastEmptyAt,
 			&room.CreatedAt,
 			&room.UpdatedAt,
 		); err != nil {
@@ -632,4 +654,23 @@ func (r *Repository) FindStaleEmptyPlayingRooms(ctx context.Context, olderThan t
 	}
 
 	return rooms, nil
+}
+
+func (r *Repository) MarkRoomEmpty(ctx context.Context, roomID string) error {
+	const op = "room.repository.postgres.MarkRoomEmpty"
+
+	query := `
+		UPDATE rooms
+		SET last_empty_at = COALESCE(last_empty_at, NOW()),
+    	updated_at = NOW()
+		WHERE id = $1
+		  AND status = 'playing'
+	`
+
+	_, err := r.db.ExecContext(ctx, query, roomID)
+	if err != nil {
+		return fmt.Errorf("[%s]: exec failed: %w", op, err)
+	}
+
+	return nil
 }

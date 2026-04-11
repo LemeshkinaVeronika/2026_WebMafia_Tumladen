@@ -94,6 +94,7 @@ func (s *Service) CreateRoom(ctx context.Context, req dto.CreateRoomServiceReque
 		GameType:     defaultGameType,
 		MaxPlayers:   defaultMaxPlayers,
 		Settings:     settings,
+		LastEmptyAt:  &now,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
@@ -478,11 +479,18 @@ func (s *Service) CleanupStaleRooms(ctx context.Context, waitingTTL, playingTTL 
 			if errors.Is(err, roomPostgres.ErrNotFound) {
 				continue
 			}
+			if errors.Is(err, roomPostgres.ErrForbiddenDeleteActiveRoom) {
+				continue
+			}
 			return err
 		}
 	}
 
 	return nil
+}
+
+func (s *Service) MarkRoomEmpty(ctx context.Context, roomID string) error {
+	return s.repo.MarkRoomEmpty(ctx, roomID)
 }
 
 func generateInviteCode() string {

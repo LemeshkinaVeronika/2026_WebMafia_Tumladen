@@ -24,6 +24,7 @@ func (s *Service) CreateGuestSession(ctx context.Context, req dto.CreateGuestSes
 	}
 
 	session := &model.GuestSession{
+		SessionID:   uuid.NewString(),
 		ActorID:     uuid.NewString(),
 		DisplayName: displayName,
 		CreatedAt:   time.Now().UTC(),
@@ -33,7 +34,7 @@ func (s *Service) CreateGuestSession(ctx context.Context, req dto.CreateGuestSes
 		return nil, err
 	}
 
-	token, err := s.tokenProvider.CreateGuestToken(ctx, session.ActorID, session.DisplayName)
+	token, err := s.tokenProvider.CreateGuestToken(ctx, session.SessionID, session.ActorID, session.DisplayName)
 	if err != nil {
 		return nil, err
 	}

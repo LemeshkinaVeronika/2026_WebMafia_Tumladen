@@ -13,14 +13,17 @@ import (
 )
 
 type Config struct {
-	AppEnv    string
-	HTTPHost  string
-	HTTPPort  int
-	LogLevel  string
-	JWTSecret string
-	JWTTTL    time.Duration
-	Postgres  postgres.Config
-	CORS      middleware.CORSConfig
+	AppEnv                string
+	HTTPHost              string
+	HTTPPort              int
+	LogLevel              string
+	JWTSecret             string
+	JWTTTL                time.Duration
+	RoomCleanupInterval   time.Duration
+	RoomWaitingCleanupTTL time.Duration
+	RoomPlayingCleanupTTL time.Duration
+	Postgres              postgres.Config
+	CORS                  middleware.CORSConfig
 }
 
 func Load() (*Config, error) {
@@ -30,12 +33,15 @@ func Load() (*Config, error) {
 	}
 
 	cfg := &Config{
-		AppEnv:    getEnv("APP_ENV", "local"),
-		HTTPHost:  getEnv("HTTP_HOST", "0.0.0.0"),
-		HTTPPort:  getEnvInt("HTTP_PORT", 8080),
-		LogLevel:  getEnv("LOG_LEVEL", "info"),
-		JWTSecret: jwtSecret,
-		JWTTTL:    getEnvDuration("JWT_TTL", 24*time.Hour),
+		AppEnv:                getEnv("APP_ENV", "local"),
+		HTTPHost:              getEnv("HTTP_HOST", "0.0.0.0"),
+		HTTPPort:              getEnvInt("HTTP_PORT", 8080),
+		LogLevel:              getEnv("LOG_LEVEL", "info"),
+		JWTSecret:             jwtSecret,
+		JWTTTL:                getEnvDuration("JWT_TTL", 24*time.Hour),
+		RoomCleanupInterval:   getEnvDuration("ROOM_CLEANUP_INTERVAL", 30*time.Second),
+		RoomWaitingCleanupTTL: getEnvDuration("ROOM_WAITING_CLEANUP_TTL", 15*time.Minute),
+		RoomPlayingCleanupTTL: getEnvDuration("ROOM_PLAYING_CLEANUP_TTL", 3*time.Minute),
 		Postgres: postgres.Config{
 			Host:            getEnv("DB_HOST", "postgres"),
 			Port:            getEnvInt("DB_PORT", 5432),

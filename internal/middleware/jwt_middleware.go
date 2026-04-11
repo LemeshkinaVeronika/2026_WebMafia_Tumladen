@@ -11,7 +11,10 @@ import (
 
 type contextKey string
 
-const actorKey contextKey = "actor"
+const (
+	actorKey       contextKey = "actor"
+	authSessionKey contextKey = "authSession"
+)
 
 type Auth struct {
 	jwt *jwtprovider.JWTProvider
@@ -58,7 +61,13 @@ func (a *Auth) AuthMiddleware(next http.Handler) http.Handler {
 			DisplayName: claims.DisplayName,
 		}
 
+		authSession := model.AuthSession{
+			SessionID: claims.SessionID,
+			Actor:     actor,
+		}
+
 		ctx := context.WithValue(r.Context(), actorKey, actor)
+		ctx = context.WithValue(ctx, authSessionKey, authSession)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -66,4 +75,9 @@ func (a *Auth) AuthMiddleware(next http.Handler) http.Handler {
 func ActorFromContext(ctx context.Context) (model.Actor, bool) {
 	actor, ok := ctx.Value(actorKey).(model.Actor)
 	return actor, ok
+}
+
+func AuthSessionFromContext(ctx context.Context) (model.AuthSession, bool) {
+	session, ok := ctx.Value(authSessionKey).(model.AuthSession)
+	return session, ok
 }

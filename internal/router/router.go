@@ -8,13 +8,15 @@ import (
 	"github.com/webmafia/tumladan/internal/middleware"
 	roomDelivery "github.com/webmafia/tumladan/internal/room/delivery/http"
 	internalws "github.com/webmafia/tumladan/internal/ws"
+	wsticketDelivery "github.com/webmafia/tumladan/internal/ws_ticket/delivery/http"
 )
 
 type AppHandlers struct {
-	GuestHandler *guestDelivery.Handler
-	RoomHandler  *roomDelivery.Handler
-	WSHandler    *internalws.Handler
-	cors         middleware.CORSConfig
+	GuestHandler    *guestDelivery.Handler
+	RoomHandler     *roomDelivery.Handler
+	WSHandler       *internalws.Handler
+	cors            middleware.CORSConfig
+	WSTicketHandler *wsticketDelivery.Handler
 }
 
 func NewRouter(handlers AppHandlers, healthHandler http.HandlerFunc, auth *middleware.Auth, cors middleware.CORSConfig) *chi.Mux {
@@ -41,6 +43,9 @@ func NewRouter(handlers AppHandlers, healthHandler http.HandlerFunc, auth *middl
 			api.Group(func(protected chi.Router) {
 				protected.Use(auth.AuthMiddleware)
 				handlers.RoomHandler.RegisterProtectedRoutes(protected)
+				if handlers.WSTicketHandler != nil {
+					handlers.WSTicketHandler.RegisterProtectedRoutes(protected)
+				}
 			})
 		}
 	})

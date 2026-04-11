@@ -21,6 +21,7 @@ type Room struct {
 	MaxPlayers   int
 	Settings     JSONB
 	PlayersCount int
+	LastEmptyAt  *time.Time
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }

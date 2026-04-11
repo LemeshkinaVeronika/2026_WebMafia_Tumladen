@@ -14,6 +14,7 @@ type JWTProvider struct {
 }
 
 type Claims struct {
+	SessionID   string `json:"sessionId"`
 	ActorID     string `json:"actorId"`
 	ActorType   string `json:"actor_type"`
 	DisplayName string `json:"displayName"`
@@ -27,14 +28,16 @@ func New(secret string, ttl time.Duration) *JWTProvider {
 	}
 }
 
-func (p *JWTProvider) CreateGuestToken(_ context.Context, actorID, displayName string) (string, error) {
+func (p *JWTProvider) CreateGuestToken(_ context.Context, sessionID, actorID, displayName string) (string, error) {
 	now := time.Now()
 
 	claims := &Claims{
+		SessionID:   sessionID,
 		ActorID:     actorID,
 		ActorType:   "guest",
 		DisplayName: displayName,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        sessionID,
 			Subject:   actorID,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(p.ttl)),

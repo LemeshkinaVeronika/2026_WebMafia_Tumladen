@@ -11,7 +11,7 @@ type IRepository interface {
 }
 
 type ITokenProvider interface {
-	CreateGuestToken(ctx context.Context, actorID, displayName string) (string, error)
+	CreateGuestToken(ctx context.Context, sessionID, actorID, displayName string) (string, error)
 }
 
 type Service struct {
