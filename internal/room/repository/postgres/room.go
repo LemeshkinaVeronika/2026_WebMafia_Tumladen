@@ -165,7 +165,7 @@ func (r *Repository) GetByID(ctx context.Context, roomID string) (*model.Room, e
 	return &room, nil
 }
 
-func (r *Repository) UpdateSettings(ctx context.Context, roomID, gameType string, maxPlayers int, settings model.JSONB) (*model.Room, []model.RoomParticipant, error) {
+func (r *Repository) UpdateSettings(ctx context.Context, roomID, name, gameType string, maxPlayers int, settings model.JSONB) (*model.Room, []model.RoomParticipant, error) {
 	const op = "room.repository.postgres.UpdateRoomSettings"
 
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -196,19 +196,21 @@ func (r *Repository) UpdateSettings(ctx context.Context, roomID, gameType string
 
 	query := `
 	UPDATE rooms
-	SET game_type = $2,
-	    max_players = $3,
-	    settings = $4,
+	SET name = $2,
+	    game_type = $3,
+	    max_players = $4,
+	    settings = $5,
 	    updated_at = NOW()
 	WHERE id = $1
 	RETURNING updated_at
 `
 
 	var updatedAt time.Time
-	if err := tx.QueryRowContext(ctx, query, roomID, gameType, maxPlayers, settings).Scan(&updatedAt); err != nil {
+	if err := tx.QueryRowContext(ctx, query, roomID, name, gameType, maxPlayers, settings).Scan(&updatedAt); err != nil {
 		return nil, nil, fmt.Errorf("[%s]: update failed: %w", op, err)
 	}
 
+	room.Name = name
 	room.GameType = gameType
 	room.MaxPlayers = maxPlayers
 	room.Settings = settings

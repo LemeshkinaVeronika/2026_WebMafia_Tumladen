@@ -124,6 +124,7 @@ func (h *Handler) UpdateRoomSettings(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.service.UpdateRoomSettings(r.Context(), roomDTO.UpdateRoomSettingsServiceRequest{
 		ActorID:    actor.ID,
 		RoomID:     roomID,
+		Name:       req.Name,
 		GameType:   req.GameType,
 		Settings:   req.Settings,
 		MaxPlayers: req.MaxPlayers,
@@ -134,7 +135,8 @@ func (h *Handler) UpdateRoomSettings(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "room not found", http.StatusNotFound)
 		case errors.Is(err, service.ErrForbidden):
 			http.Error(w, "forbidden", http.StatusForbidden)
-		case errors.Is(err, service.ErrInvalidGameType),
+		case errors.Is(err, service.ErrInvalidRoomName),
+			errors.Is(err, service.ErrInvalidGameType),
 			errors.Is(err, service.ErrInvalidMaxPlayers),
 			errors.Is(err, service.ErrInvalidRoomSettings),
 			errors.Is(err, service.ErrMaxPlayersLessThanParticipants),

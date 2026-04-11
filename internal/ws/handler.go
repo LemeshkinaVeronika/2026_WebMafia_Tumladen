@@ -333,6 +333,7 @@ func (h *MessageHandler) handleUpdateRoomSettings(ctx context.Context, client *p
 		roomDTO.UpdateRoomSettingsServiceRequest{
 			ActorID:    client.ActorID(),
 			RoomID:     p.RoomID,
+			Name:       p.Name,
 			GameType:   p.GameType,
 			MaxPlayers: p.MaxPlayers,
 			Settings:   p.Settings,
@@ -345,7 +346,8 @@ func (h *MessageHandler) handleUpdateRoomSettings(ctx context.Context, client *p
 			message = "forbidden"
 		case errors.Is(err, roomService.ErrRoomNotFound):
 			message = "room not found"
-		case errors.Is(err, roomService.ErrInvalidGameType),
+		case errors.Is(err, roomService.ErrInvalidRoomName),
+			errors.Is(err, roomService.ErrInvalidGameType),
 			errors.Is(err, roomService.ErrInvalidMaxPlayers),
 			errors.Is(err, roomService.ErrInvalidRoomSettings),
 			errors.Is(err, roomService.ErrMaxPlayersLessThanParticipants),

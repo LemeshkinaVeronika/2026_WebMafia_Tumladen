@@ -207,12 +207,26 @@ func (s *Service) UpdateRoomSettings(ctx context.Context, req dto.UpdateRoomSett
 		return nil, ErrRoomSettingsLocked
 	}
 
-	gameType := strings.TrimSpace(req.GameType)
-	if gameType == "" {
-		return nil, ErrInvalidGameType
+	name := room.Name
+	if req.Name != "" {
+		name = strings.TrimSpace(req.Name)
+		if len(name) < minRoomNameLength || len(name) > maxRoomNameLength {
+			return nil, ErrInvalidRoomName
+		}
 	}
 
-	maxPlayers := req.MaxPlayers
+	gameType := room.GameType
+	if req.GameType != "" {
+		gameType = strings.TrimSpace(req.GameType)
+		if gameType == "" {
+			return nil, ErrInvalidGameType
+		}
+	}
+
+	maxPlayers := room.MaxPlayers
+	if req.MaxPlayers != 0 {
+		maxPlayers = req.MaxPlayers
+	}
 	if maxPlayers < 2 {
 		return nil, ErrInvalidMaxPlayers
 	}
@@ -226,12 +240,17 @@ func (s *Service) UpdateRoomSettings(ctx context.Context, req dto.UpdateRoomSett
 		return nil, ErrInvalidGameType
 	}
 
-	settings, err := normalizeRoomSettings(gameType, req.Settings)
+	settingsRaw := req.Settings
+	if len(settingsRaw) == 0 {
+		settingsRaw = json.RawMessage(room.Settings)
+	}
+
+	settings, err := normalizeRoomSettings(gameType, settingsRaw)
 	if err != nil {
 		return nil, err
 	}
 
-	updatedRoom, participants, err := s.repo.UpdateSettings(ctx, req.RoomID, gameType, maxPlayers, settings)
+	updatedRoom, participants, err := s.repo.UpdateSettings(ctx, req.RoomID, name, gameType, maxPlayers, settings)
 	if err != nil {
 		switch {
 		case errors.Is(err, roomPostgres.ErrNotFound):

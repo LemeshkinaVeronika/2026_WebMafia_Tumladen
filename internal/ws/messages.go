@@ -16,6 +16,7 @@ type JoinRoomPayload struct {
 }
 
 type UpdateRoomSettingsPayload struct {
+	Name       string          `json:"name"`
 	RoomID     string          `json:"roomId"`
 	GameType   string          `json:"gameType"`
 	MaxPlayers int             `json:"maxPlayers"`
