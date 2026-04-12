@@ -430,22 +430,29 @@ func (h *MessageHandler) broadcastRoomState(roomID string, roomState any) {
 }
 
 func (h *MessageHandler) sendMatchState(client *pkgws.Client, matchState any) {
-	writeJSON(client, ServerMessage{
-		Type:    "match_state",
-		Payload: matchState,
-	})
-}
-
-func (h *MessageHandler) broadcastMatchState(roomID string, matchState any) {
 	msg, err := json.Marshal(ServerMessage{
 		Type:    "match_state",
-		Payload: matchState,
+		Payload: matchStatePayloadForActor(matchState, client.ActorID()),
 	})
 	if err != nil {
 		return
 	}
 
-	h.hub.BroadcastTo(roomID, msg)
+	client.SendMessage(msg)
+}
+
+func (h *MessageHandler) broadcastMatchState(roomID string, matchState any) {
+	h.hub.BroadcastCustom(roomID, func(client *pkgws.Client) []byte {
+		msg, err := json.Marshal(ServerMessage{
+			Type:    "match_state",
+			Payload: matchStatePayloadForActor(matchState, client.ActorID()),
+		})
+		if err != nil {
+			return nil
+		}
+
+		return msg
+	})
 }
 
 func (h *MessageHandler) sendActiveMatchStateIfExists(ctx context.Context, client *pkgws.Client, roomID string) {
@@ -791,6 +798,45 @@ func (h *MessageHandler) handleKickParticipant(ctx context.Context, client *pkgw
 		return
 	}
 
+	kickNotice, err := json.Marshal(ServerMessage{
+		Type: "participant_kicked",
+		Payload: ParticipantKickedPayload{
+			Reason: "kicked_by_owner",
+		},
+	})
+	if err == nil {
+		h.hub.SendToActor(p.RoomID, p.TargetActorID, kickNotice)
+	}
+
 	h.hub.DisconnectActor(p.RoomID, p.TargetActorID)
 	h.broadcastRoomState(p.RoomID, roomState)
+}
+
+func matchStatePayloadForActor(matchState any, actorID string) any {
+	resp, ok := matchState.(*matchDTO.MatchResponse)
+	if ok {
+		return enrichMatchResponseForActor(resp, actorID)
+	}
+
+	respValue, ok := matchState.(matchDTO.MatchResponse)
+	if ok {
+		return enrichMatchResponseForActor(&respValue, actorID)
+	}
+
+	return matchState
+}
+
+func enrichMatchResponseForActor(matchState *matchDTO.MatchResponse, actorID string) matchDTO.MatchResponse {
+	resp := *matchState
+	isYourTurn := false
+
+	var state struct {
+		CurrentPlayerID string `json:"currentPlayerId"`
+	}
+	if len(resp.GameState) > 0 && json.Unmarshal(resp.GameState, &state) == nil {
+		isYourTurn = state.CurrentPlayerID != "" && state.CurrentPlayerID == actorID
+	}
+
+	resp.IsYourTurn = &isYourTurn
+	return resp
 }

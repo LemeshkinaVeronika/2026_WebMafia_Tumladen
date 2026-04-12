@@ -36,6 +36,10 @@ type ErrorPayload struct {
 	Message string `json:"message"`
 }
 
+type ParticipantKickedPayload struct {
+	Reason string `json:"reason"`
+}
+
 type RoomStatePayload = roomDTO.RoomResponse
 
 type MatchStatePayload = matchDTO.MatchResponse

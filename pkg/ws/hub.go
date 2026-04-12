@@ -20,6 +20,17 @@ type disconnectActorRequest struct {
 	actorID string
 }
 
+type sendToActorRequest struct {
+	roomID  string
+	actorID string
+	data    []byte
+}
+
+type broadcastCustomRequest struct {
+	roomID string
+	build  func(*Client) []byte
+}
+
 type Hub struct {
 	rooms           map[string]map[*Client]bool
 	mu              sync.RWMutex
@@ -28,6 +39,8 @@ type Hub struct {
 	unregister      chan *Client
 	leave           chan leaveRequest
 	disconnectActor chan disconnectActorRequest
+	sendToActor     chan sendToActorRequest
+	broadcastCustom chan broadcastCustomRequest
 }
 
 func NewHub() *Hub {
@@ -37,6 +50,8 @@ func NewHub() *Hub {
 		unregister:      make(chan *Client),
 		leave:           make(chan leaveRequest),
 		disconnectActor: make(chan disconnectActorRequest),
+		sendToActor:     make(chan sendToActorRequest),
+		broadcastCustom: make(chan broadcastCustomRequest),
 		rooms:           make(map[string]map[*Client]bool),
 	}
 }
@@ -125,6 +140,45 @@ func (h *Hub) Run(ctx context.Context) {
 			}
 			h.mu.Unlock()
 
+		case req := <-h.sendToActor:
+			if req.roomID == "" || req.actorID == "" || len(req.data) == 0 {
+				continue
+			}
+
+			if clients, ok := h.rooms[req.roomID]; ok {
+				for client := range clients {
+					if client.ActorID() != req.actorID {
+						continue
+					}
+					client.SendMessage(req.data)
+				}
+			}
+
+		case req := <-h.broadcastCustom:
+			if req.roomID == "" || req.build == nil {
+				continue
+			}
+
+			if clients, ok := h.rooms[req.roomID]; ok {
+				for client := range clients {
+					data := req.build(client)
+					if len(data) == 0 {
+						continue
+					}
+
+					select {
+					case client.send <- data:
+					default:
+						delete(clients, client)
+						close(client.send)
+
+						if len(clients) == 0 {
+							delete(h.rooms, req.roomID)
+						}
+					}
+				}
+			}
+
 		case message := <-h.broadcast:
 			h.mu.Lock()
 			if clients, ok := h.rooms[message.RoomID]; ok {
@@ -165,6 +219,21 @@ func (h *Hub) DisconnectActor(roomID, actorID string) {
 	h.disconnectActor <- disconnectActorRequest{
 		roomID:  roomID,
 		actorID: actorID,
+	}
+}
+
+func (h *Hub) SendToActor(roomID, actorID string, data []byte) {
+	h.sendToActor <- sendToActorRequest{
+		roomID:  roomID,
+		actorID: actorID,
+		data:    data,
+	}
+}
+
+func (h *Hub) BroadcastCustom(roomID string, build func(*Client) []byte) {
+	h.broadcastCustom <- broadcastCustomRequest{
+		roomID: roomID,
+		build:  build,
 	}
 }
 
