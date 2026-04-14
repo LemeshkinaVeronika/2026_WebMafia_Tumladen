@@ -11,7 +11,6 @@ services:
       - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U webmafia -d webmafia"]
       interval: 5s
@@ -20,11 +19,27 @@ services:
     networks:
       - tumladan_net
 
+  migrate:
+    image: migrate/migrate:v4.18.3
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://webmafia:webmafia@postgres:5432/webmafia?sslmode=disable"
+      - "up"
+    volumes:
+      - ./migrations:/migrations:ro
+    networks:
+      - tumladan_net
+
   app:
     build: .
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     env_file:
       - .env
     ports:

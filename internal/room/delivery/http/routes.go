@@ -13,6 +13,4 @@ func (h *Handler) RegisterPublicRoutes(r chi.Router) {
 
 func (h *Handler) RegisterProtectedRoutes(r chi.Router) {
 	r.MethodFunc(http.MethodPost, "/rooms", h.CreateRoom)
-	r.MethodFunc(http.MethodPatch, "/rooms/{id}/settings", h.UpdateRoomSettings)
-	r.MethodFunc(http.MethodPost, "/rooms/{id}/start", h.StartRoom)
 }

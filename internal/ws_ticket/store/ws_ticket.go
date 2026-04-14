@@ -66,6 +66,32 @@ func (s *Store) Reserve(value string) (model.AuthSession, error) {
 	}, nil
 }
 
+func (s *Store) Resolve(value string) (model.AuthSession, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.cleanupExpiredLocked()
+
+	ticket, ok := s.tickets[value]
+	if !ok {
+		return model.AuthSession{}, ErrTicketNotFound
+	}
+
+	if time.Now().UTC().After(ticket.ExpiresAt) {
+		delete(s.tickets, value)
+		return model.AuthSession{}, ErrTicketExpired
+	}
+
+	return model.AuthSession{
+		SessionID: ticket.SessionID,
+		Actor: model.Actor{
+			ID:          ticket.ActorID,
+			Type:        model.ActorType(ticket.ActorType),
+			DisplayName: ticket.DisplayName,
+		},
+	}, nil
+}
+
 func (s *Store) Release(value string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

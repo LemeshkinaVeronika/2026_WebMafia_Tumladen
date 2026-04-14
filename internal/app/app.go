@@ -4,14 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	matchPostgres "github.com/webmafia/tumladan/internal/match/repository/postgres"
-	matchService "github.com/webmafia/tumladan/internal/match/service"
-	internalws "github.com/webmafia/tumladan/internal/ws"
-	wsticketService "github.com/webmafia/tumladan/internal/ws_ticket/service"
-	wsticketStore "github.com/webmafia/tumladan/internal/ws_ticket/store"
-	"log/slog"
 	"net/http"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -19,25 +12,31 @@ import (
 	guestHTTP "github.com/webmafia/tumladan/internal/guest/delivery/http"
 	guestPostgres "github.com/webmafia/tumladan/internal/guest/repository/postgres"
 	guestService "github.com/webmafia/tumladan/internal/guest/service"
+	matchPostgres "github.com/webmafia/tumladan/internal/match/repository/postgres"
+	matchService "github.com/webmafia/tumladan/internal/match/service"
 	"github.com/webmafia/tumladan/internal/middleware"
 	roomHTTP "github.com/webmafia/tumladan/internal/room/delivery/http"
 	roomPostgres "github.com/webmafia/tumladan/internal/room/repository/postgres"
 	roomService "github.com/webmafia/tumladan/internal/room/service"
 	"github.com/webmafia/tumladan/internal/router"
+	internalws "github.com/webmafia/tumladan/internal/ws"
 	wsticketHTTP "github.com/webmafia/tumladan/internal/ws_ticket/delivery/http"
+	wsticketService "github.com/webmafia/tumladan/internal/ws_ticket/service"
+	wsticketStore "github.com/webmafia/tumladan/internal/ws_ticket/store"
 	jwtprovider "github.com/webmafia/tumladan/pkg/jwt"
+	"github.com/webmafia/tumladan/pkg/logger"
 	"github.com/webmafia/tumladan/pkg/postgres"
-	pkgws "github.com/webmafia/tumladan/pkg/ws"
 )
 
 type App struct {
 	cfg     *Config
-	logger  *slog.Logger
+	logger  logger.Logger
 	server  *http.Server
 	db      *sql.DB
 	ctx     context.Context
 	stop    context.CancelFunc
 	roomSvc *roomService.Service
+	ws      *internalws.Handler
 }
 
 func New(ctx context.Context) (*App, error) {
@@ -75,12 +74,17 @@ func New(ctx context.Context) (*App, error) {
 	wsTicketSvc := wsticketService.NewService(wsTicketStore)
 	wsTicketHandler := wsticketHTTP.NewHandler(wsTicketSvc)
 
-	wsConfig := pkgws.NewDefaultConfig()
-	wsConfig.AllowedOrigins = cfg.CORS.AllowedOrigins
-	hub := pkgws.NewHub()
-	go hub.Run(ctx)
-
-	wsHandler := internalws.NewHandler(roomSvc, matchSvc, wsTicketSvc, hub, wsConfig)
+	wsHandler, err := internalws.NewHandler(roomSvc, matchSvc, wsTicketSvc, logger)
+	if err != nil {
+		stop()
+		_ = db.Close()
+		return nil, err
+	}
+	if err := wsHandler.Run(); err != nil {
+		stop()
+		_ = db.Close()
+		return nil, err
+	}
 
 	r := router.NewRouter(
 		router.AppHandlers{
@@ -108,17 +112,16 @@ func New(ctx context.Context) (*App, error) {
 		ctx:     ctx,
 		stop:    stop,
 		roomSvc: roomSvc,
+		ws:      wsHandler,
 	}, nil
 }
 
 func (a *App) Run() error {
 	defer a.stop()
 	defer a.db.Close()
+	defer a.logger.Sync()
 
-	a.logger.Info("starting server",
-		"env", a.cfg.AppEnv,
-		"addr", a.cfg.HTTPAddress(),
-	)
+	a.logger.Infof("starting server env=%s addr=%s", a.cfg.AppEnv, a.cfg.HTTPAddress())
 
 	serverErrCh := make(chan error, 1)
 
@@ -134,7 +137,7 @@ func (a *App) Run() error {
 
 	select {
 	case <-a.ctx.Done():
-		a.logger.Info("shutdown signal received")
+		a.logger.Infof("shutdown signal received")
 	case err := <-serverErrCh:
 		if err != nil {
 			return err
@@ -149,7 +152,13 @@ func (a *App) Run() error {
 		return err
 	}
 
-	a.logger.Info("server stopped")
+	if a.ws != nil {
+		if err := a.ws.Shutdown(shutdownCtx); err != nil {
+			return err
+		}
+	}
+
+	a.logger.Infof("server stopped")
 	return nil
 }
 
@@ -163,40 +172,33 @@ func (a *App) runRoomCleanup() {
 			return
 		case <-ticker.C:
 			if err := a.roomSvc.CleanupStaleRooms(a.ctx, a.cfg.RoomWaitingCleanupTTL, a.cfg.RoomPlayingCleanupTTL); err != nil {
-				a.logger.Error("room cleanup failed", "error", err)
+				a.logger.Errorf("room cleanup failed error=%v", err)
 			}
 		}
 	}
 }
 
-func newLogger(cfg *Config) *slog.Logger {
-	var level slog.Level
-
-	switch cfg.LogLevel {
-	case "debug":
-		level = slog.LevelDebug
-	case "warn":
-		level = slog.LevelWarn
-	case "error":
-		level = slog.LevelError
-	default:
-		level = slog.LevelInfo
+func newLogger(cfg *Config) logger.Logger {
+	mode := logger.ModeProd
+	if cfg.AppEnv == "local" || cfg.AppEnv == "dev" {
+		mode = logger.ModeDev
 	}
 
-	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: level,
-	})
+	log, err := logger.New(cfg.LogLevel, mode)
+	if err != nil {
+		log, _ = logger.New(logger.LevelInfo, logger.ModeDev)
+	}
 
-	return slog.New(handler)
+	return log
 }
 
-func healthHandler(logger *slog.Logger, db *sql.DB) http.HandlerFunc {
+func healthHandler(logger logger.Logger, db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
 
 		if err := db.PingContext(ctx); err != nil {
-			logger.Error("healthcheck failed", "error", err)
+			logger.Errorf("healthcheck failed error=%v", err)
 			http.Error(w, "db unavailable", http.StatusServiceUnavailable)
 			return
 		}

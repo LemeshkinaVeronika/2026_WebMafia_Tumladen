@@ -27,7 +27,7 @@ func NewRouter(handlers AppHandlers, healthHandler http.HandlerFunc, auth *middl
 	r.Get("/health", healthHandler)
 
 	if handlers.WSHandler != nil {
-		r.Handle("/ws", handlers.WSHandler)
+		handlers.WSHandler.RegisterRoutes(r)
 	}
 
 	r.Route("/api/v1", func(api chi.Router) {

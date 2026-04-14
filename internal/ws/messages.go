@@ -2,6 +2,7 @@ package ws
 
 import (
 	"encoding/json"
+
 	matchDTO "github.com/webmafia/tumladan/internal/match/dto"
 	roomDTO "github.com/webmafia/tumladan/internal/room/dto"
 )
@@ -56,11 +57,6 @@ type FinishRoomMatchPayload struct {
 
 type DeleteRoomPayload struct {
 	RoomID string `json:"roomId"`
-}
-
-type AbandonRoomMatchPayload struct {
-	RoomID string `json:"roomId"`
-	Reason string `json:"reason,omitempty"`
 }
 
 type KickParticipantPayload struct {

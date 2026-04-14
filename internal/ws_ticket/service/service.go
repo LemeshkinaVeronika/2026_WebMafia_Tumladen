@@ -12,6 +12,10 @@ func (s *Service) Reserve(ticket string) (model.AuthSession, error) {
 	return s.store.Reserve(ticket)
 }
 
+func (s *Service) Resolve(ticket string) (model.AuthSession, error) {
+	return s.store.Resolve(ticket)
+}
+
 func (s *Service) Release(ticket string) {
 	s.store.Release(ticket)
 }
