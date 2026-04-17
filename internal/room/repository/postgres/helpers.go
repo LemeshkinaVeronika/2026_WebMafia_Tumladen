@@ -9,7 +9,7 @@ import (
 
 func (r *Repository) getRoomByIDForUpdate(ctx context.Context, tx *sql.Tx, roomID string) (*model.Room, error) {
 	query := `
-		SELECT id, name, is_private, invite_code, owner_actor_id, status, game_type, max_players, settings, created_at, updated_at
+		SELECT id, name, is_private, invite_code, owner_actor_id, status, game_type, max_players, settings, last_empty_at, created_at, updated_at
 		FROM rooms
 		WHERE id = $1
 		FOR UPDATE
@@ -26,6 +26,7 @@ func (r *Repository) getRoomByIDForUpdate(ctx context.Context, tx *sql.Tx, roomI
 		&room.GameType,
 		&room.MaxPlayers,
 		&room.Settings,
+		&room.LastEmptyAt,
 		&room.CreatedAt,
 		&room.UpdatedAt,
 	)
@@ -86,9 +87,9 @@ func (r *Repository) addParticipantTx(ctx context.Context, tx *sql.Tx, roomID, a
 func (r *Repository) createMatchTx(ctx context.Context, tx *sql.Tx, match *model.Match) error {
 	query := `
 		INSERT INTO matches (
-			id, room_id, game_type, status, game_state, result, created_at, updated_at
+			id, room_id, game_type, status, game_state, result, termination_reason, terminated_by_actor_id, terminated_at, created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	`
 
 	_, err := tx.ExecContext(
@@ -100,6 +101,9 @@ func (r *Repository) createMatchTx(ctx context.Context, tx *sql.Tx, match *model
 		match.Status,
 		match.GameState,
 		match.Result,
+		match.TerminationReason,
+		match.TerminatedByActorID,
+		match.TerminatedAt,
 		match.CreatedAt,
 		match.UpdatedAt,
 	)
@@ -108,8 +112,8 @@ func (r *Repository) createMatchTx(ctx context.Context, tx *sql.Tx, match *model
 
 func (r *Repository) createMatchPlayersTx(ctx context.Context, tx *sql.Tx, players []model.MatchPlayer) error {
 	query := `
-		INSERT INTO match_players (match_id, actor_id, display_name, seat)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO match_players (match_id, actor_id, display_name, seat, disconnected_at)
+		VALUES ($1, $2, $3, $4, $5)
 	`
 
 	for _, player := range players {
@@ -120,6 +124,7 @@ func (r *Repository) createMatchPlayersTx(ctx context.Context, tx *sql.Tx, playe
 			player.ActorID,
 			player.DisplayName,
 			player.Seat,
+			player.DisconnectedAt,
 		); err != nil {
 			return err
 		}
@@ -130,7 +135,7 @@ func (r *Repository) createMatchPlayersTx(ctx context.Context, tx *sql.Tx, playe
 
 func (r *Repository) getActiveMatchByRoomIDForUpdate(ctx context.Context, tx *sql.Tx, roomID string) (*model.Match, error) {
 	query := `
-		SELECT id, room_id, game_type, status, game_state, result, created_at, updated_at
+		SELECT id, room_id, game_type, status, game_state, result, termination_reason, terminated_by_actor_id, terminated_at, created_at, updated_at
 		FROM matches
 		WHERE room_id = $1 AND status = 'active'
 		ORDER BY created_at DESC
@@ -146,6 +151,9 @@ func (r *Repository) getActiveMatchByRoomIDForUpdate(ctx context.Context, tx *sq
 		&match.Status,
 		&match.GameState,
 		&match.Result,
+		&match.TerminationReason,
+		&match.TerminatedByActorID,
+		&match.TerminatedAt,
 		&match.CreatedAt,
 		&match.UpdatedAt,
 	)
@@ -162,7 +170,7 @@ func (r *Repository) getActiveMatchByRoomIDForUpdate(ctx context.Context, tx *sq
 
 func (r *Repository) listMatchPlayersTx(ctx context.Context, tx *sql.Tx, matchID string) ([]model.MatchPlayer, error) {
 	query := `
-		SELECT match_id, actor_id, display_name, seat
+		SELECT match_id, actor_id, display_name, seat, disconnected_at
 		FROM match_players
 		WHERE match_id = $1
 		ORDER BY seat ASC
@@ -182,6 +190,7 @@ func (r *Repository) listMatchPlayersTx(ctx context.Context, tx *sql.Tx, matchID
 			&player.ActorID,
 			&player.DisplayName,
 			&player.Seat,
+			&player.DisconnectedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -206,6 +215,44 @@ func (r *Repository) updateMatchStateTx(ctx context.Context, tx *sql.Tx, matchID
 	`
 
 	res, err := tx.ExecContext(ctx, query, matchID, state, status, result)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+}
+
+func (r *Repository) terminateMatchTx(
+	ctx context.Context,
+	tx *sql.Tx,
+	matchID string,
+	state model.JSONB,
+	result *model.JSONB,
+	reason model.MatchTerminationReason,
+	terminatedByActorID *string,
+	terminatedAt time.Time,
+) error {
+	query := `
+		UPDATE matches
+		SET game_state = $2,
+		    status = $3,
+		    result = $4,
+		    termination_reason = $5,
+		    terminated_by_actor_id = $6,
+		    terminated_at = $7,
+		    updated_at = NOW()
+		WHERE id = $1
+	`
+
+	res, err := tx.ExecContext(ctx, query, matchID, state, model.MatchStatusFinished, result, reason, terminatedByActorID, terminatedAt)
 	if err != nil {
 		return err
 	}

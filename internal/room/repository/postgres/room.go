@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -386,8 +385,15 @@ func (r *Repository) StartRoomWithMatch(ctx context.Context, roomID string, matc
 	return room, participants, nil
 }
 
-func (r *Repository) FinishActiveMatch(ctx context.Context, roomID string, result model.JSONB) (*model.Match, []model.MatchPlayer, error) {
-	const op = "room.repository.postgres.FinishActiveMatch"
+func (r *Repository) TerminateActiveMatch(
+	ctx context.Context,
+	roomID string,
+	reason model.MatchTerminationReason,
+	result *model.JSONB,
+	terminatedByActorID *string,
+	terminatedAt time.Time,
+) (*model.Match, []model.MatchPlayer, error) {
+	const op = "room.repository.postgres.TerminateActiveMatch"
 
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -412,10 +418,7 @@ func (r *Repository) FinishActiveMatch(ctx context.Context, roomID string, resul
 		return nil, nil, fmt.Errorf("[%s]: list match players failed: %w", op, err)
 	}
 
-	now := time.Now().UTC()
-	resultCopy := result
-
-	if err := r.updateMatchStateTx(ctx, tx, match.ID, match.GameState, model.MatchStatusFinished, &resultCopy); err != nil {
+	if err := r.terminateMatchTx(ctx, tx, match.ID, match.GameState, result, reason, terminatedByActorID, terminatedAt); err != nil {
 		return nil, nil, fmt.Errorf("[%s]: update match failed: %w", op, err)
 	}
 
@@ -425,8 +428,11 @@ func (r *Repository) FinishActiveMatch(ctx context.Context, roomID string, resul
 	}
 
 	match.Status = model.MatchStatusFinished
-	match.Result = &resultCopy
-	match.UpdatedAt = now
+	match.Result = result
+	match.TerminationReason = &reason
+	match.TerminatedByActorID = terminatedByActorID
+	match.TerminatedAt = &terminatedAt
+	match.UpdatedAt = terminatedAt
 
 	room.Status = model.RoomStatusWaiting
 	room.UpdatedAt = updatedAt
@@ -439,64 +445,44 @@ func (r *Repository) FinishActiveMatch(ctx context.Context, roomID string, resul
 	return match, players, nil
 }
 
-func (r *Repository) AbandonActiveMatch(ctx context.Context, roomID string, reason string) (*model.Match, []model.MatchPlayer, error) {
-	const op = "room.repository.postgres.AbandonActiveMatch"
+func (r *Repository) MarkActiveMatchPlayerDisconnected(ctx context.Context, roomID, actorID string, disconnectedAt time.Time) error {
+	const op = "room.repository.postgres.MarkActiveMatchPlayerDisconnected"
 
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, nil, fmt.Errorf("[%s]: begin tx failed: %w", op, err)
-	}
-	defer func() {
-		_ = tx.Rollback()
-	}()
+	query := `
+		UPDATE match_players mp
+		SET disconnected_at = COALESCE(mp.disconnected_at, $3)
+		FROM matches m
+		WHERE mp.match_id = m.id
+		  AND m.room_id = $1
+		  AND m.status = 'active'
+		  AND mp.actor_id = $2
+	`
 
-	room, err := r.getRoomByIDForUpdate(ctx, tx, roomID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("[%s]: get room for update failed: %w", op, err)
-	}
-
-	match, err := r.getActiveMatchByRoomIDForUpdate(ctx, tx, roomID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("[%s]: get active match failed: %w", op, err)
+	if _, err := r.db.ExecContext(ctx, query, roomID, actorID, disconnectedAt); err != nil {
+		return fmt.Errorf("[%s]: exec failed: %w", op, err)
 	}
 
-	players, err := r.listMatchPlayersTx(ctx, tx, match.ID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("[%s]: list match players failed: %w", op, err)
+	return nil
+}
+
+func (r *Repository) MarkActiveMatchPlayerConnected(ctx context.Context, roomID, actorID string) error {
+	const op = "room.repository.postgres.MarkActiveMatchPlayerConnected"
+
+	query := `
+		UPDATE match_players mp
+		SET disconnected_at = NULL
+		FROM matches m
+		WHERE mp.match_id = m.id
+		  AND m.room_id = $1
+		  AND m.status = 'active'
+		  AND mp.actor_id = $2
+	`
+
+	if _, err := r.db.ExecContext(ctx, query, roomID, actorID); err != nil {
+		return fmt.Errorf("[%s]: exec failed: %w", op, err)
 	}
 
-	resultJSON, err := json.Marshal(map[string]any{
-		"reason": reason,
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("[%s]: marshal result failed: %w", op, err)
-	}
-	result := model.JSONB(resultJSON)
-
-	now := time.Now().UTC()
-
-	if err := r.updateMatchStateTx(ctx, tx, match.ID, match.GameState, model.MatchStatusAbandoned, &result); err != nil {
-		return nil, nil, fmt.Errorf("[%s]: update match failed: %w", op, err)
-	}
-
-	updatedAt, err := r.updateRoomStatusTx(ctx, tx, roomID, model.RoomStatusWaiting)
-	if err != nil {
-		return nil, nil, fmt.Errorf("[%s]: update room status failed: %w", op, err)
-	}
-
-	match.Status = model.MatchStatusAbandoned
-	match.Result = &result
-	match.UpdatedAt = now
-
-	room.Status = model.RoomStatusWaiting
-	room.UpdatedAt = updatedAt
-	_ = room
-
-	if err := tx.Commit(); err != nil {
-		return nil, nil, fmt.Errorf("[%s]: commit failed: %w", op, err)
-	}
-
-	return match, players, nil
+	return nil
 }
 
 func (r *Repository) DeleteRoom(ctx context.Context, roomID string) error {
@@ -596,8 +582,8 @@ func (r *Repository) FindStaleEmptyWaitingRooms(ctx context.Context, olderThan t
 	return rooms, nil
 }
 
-func (r *Repository) FindStaleEmptyPlayingRooms(ctx context.Context, olderThan time.Time) ([]model.Room, error) {
-	const op = "room.repository.postgres.FindStaleEmptyPlayingRooms"
+func (r *Repository) FindRoomsWithReconnectTimeout(ctx context.Context, olderThan time.Time) ([]model.Room, error) {
+	const op = "room.repository.postgres.FindRoomsWithReconnectTimeout"
 
 	query := `
 		SELECT
@@ -615,9 +601,16 @@ func (r *Repository) FindStaleEmptyPlayingRooms(ctx context.Context, olderThan t
 			r.updated_at
 		FROM rooms r
 		WHERE r.status = 'playing'
-		  AND r.last_empty_at IS NOT NULL
-		  AND r.last_empty_at < $1
-		ORDER BY r.last_empty_at ASC
+		  AND EXISTS (
+			SELECT 1
+			FROM matches m
+			JOIN match_players mp ON mp.match_id = m.id
+			WHERE m.room_id = r.id
+			  AND m.status = 'active'
+			  AND mp.disconnected_at IS NOT NULL
+			  AND mp.disconnected_at < $1
+		  )
+		ORDER BY r.updated_at ASC
 	`
 
 	rows, err := r.db.QueryContext(ctx, query, olderThan)

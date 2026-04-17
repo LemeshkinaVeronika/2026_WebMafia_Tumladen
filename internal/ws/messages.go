@@ -51,11 +51,11 @@ type MatchActionPayload struct {
 	Payload any    `json:"payload"`
 }
 
-type FinishRoomMatchPayload struct {
+type DeleteRoomPayload struct {
 	RoomID string `json:"roomId"`
 }
 
-type DeleteRoomPayload struct {
+type LeaveMatchPayload struct {
 	RoomID string `json:"roomId"`
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/webmafia/tumladan/internal/match/dto"
 	matchPostgres "github.com/webmafia/tumladan/internal/match/repository/postgres"
 	"github.com/webmafia/tumladan/internal/model"
+	roomDTO "github.com/webmafia/tumladan/internal/room/dto"
 	"time"
 )
 
@@ -27,12 +28,24 @@ func matchToResponse(match model.Match, players []model.MatchPlayer) dto.MatchRe
 	if match.Result != nil {
 		resp.Result = json.RawMessage(*match.Result)
 	}
+	if match.TerminationReason != nil {
+		reason := string(*match.TerminationReason)
+		resp.TerminationReason = &reason
+	}
+	if match.TerminatedByActorID != nil {
+		resp.TerminatedByActorID = match.TerminatedByActorID
+	}
+	if match.TerminatedAt != nil {
+		terminatedAt := match.TerminatedAt.Format(time.RFC3339)
+		resp.TerminatedAt = &terminatedAt
+	}
 
 	for _, player := range players {
 		resp.Players = append(resp.Players, dto.MatchPlayerResponse{
-			ActorID:     player.ActorID,
-			DisplayName: player.DisplayName,
-			Seat:        player.Seat,
+			ActorID:        player.ActorID,
+			DisplayName:    player.DisplayName,
+			Seat:           player.Seat,
+			IsDisconnected: player.DisconnectedAt != nil,
 		})
 	}
 
@@ -60,6 +73,8 @@ func BuildInitialMatch(room *model.Room, participants []model.RoomParticipant) (
 		return nil, nil, fmt.Errorf("unsupported game type: %s", room.GameType)
 	}
 }
+
+//TODO:убрать заглушку, вынести в отдельный слой
 
 func buildInitialCarcassonneMatch(room *model.Room, participants []model.RoomParticipant) (*model.Match, []model.MatchPlayer, error) {
 	now := time.Now().UTC()
@@ -153,6 +168,23 @@ func (s *Service) ApplyAction(ctx context.Context, req dto.ApplyMatchActionReque
 		return nil, ErrInvalidMatchAction
 	}
 
+	if nextStatus == model.MatchStatusFinished {
+		if s.terminator == nil {
+			return nil, ErrInvalidMatchAction
+		}
+
+		if err := s.terminator.FinishRoomMatch(ctx, roomDTO.FinishRoomMatchRequest{
+			ActorID: &req.ActorID,
+			RoomID:  req.RoomID,
+			Reason:  string(model.MatchTerminationReasonNormalCompletion),
+			Result:  json.RawMessage(resultOrNull(result)),
+		}); err != nil {
+			return nil, err
+		}
+
+		return s.GetLastByRoomID(ctx, req.RoomID)
+	}
+
 	if err := s.repo.UpdateState(ctx, match.ID, nextState, nextStatus, result); err != nil {
 		if errors.Is(err, matchPostgres.ErrNotFound) {
 			return nil, ErrMatchNotFound
@@ -166,6 +198,14 @@ func (s *Service) ApplyAction(ctx context.Context, req dto.ApplyMatchActionReque
 
 	resp := matchToResponse(*match, players)
 	return &resp, nil
+}
+
+func resultOrNull(result *model.JSONB) []byte {
+	if result == nil {
+		return []byte(`null`)
+	}
+
+	return *result
 }
 
 func applyCarcassonneAction(rawState model.JSONB, req dto.ApplyMatchActionRequest) (model.JSONB, model.MatchStatus, *model.JSONB, error) {

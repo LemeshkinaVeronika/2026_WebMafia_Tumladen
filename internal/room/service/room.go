@@ -22,7 +22,7 @@ const (
 	defaultMaxPlayers = 2
 
 	carcassonneMinPlayers      = 2
-	carcassonneMaxPlayers      = 5
+	carcassonneMaxPlayers      = 6
 	carcassonneDefaultTurnTime = 120
 	carcassonneMinTurnTime     = 30
 	carcassonneMaxTurnTime     = 300
@@ -318,28 +318,38 @@ func (s *Service) StartRoom(ctx context.Context, req dto.StartRoomRequest) (*dto
 	return &resp, nil
 }
 
-// TODO:не забыть убрать заглушку
 func (s *Service) FinishRoomMatch(ctx context.Context, req dto.FinishRoomMatchRequest) error {
-	room, err := s.repo.GetByID(ctx, req.RoomID)
-	if err != nil {
+	if _, err := s.repo.GetByID(ctx, req.RoomID); err != nil {
 		if errors.Is(err, roomPostgres.ErrNotFound) {
 			return ErrRoomNotFound
 		}
 		return err
 	}
 
-	if room.OwnerActorID != req.ActorID {
-		return ErrForbidden
-	}
-
-	resultJSON, err := json.Marshal(map[string]any{
-		"finished": true,
-	})
+	reason, err := normalizeMatchTerminationReason(req.Reason)
 	if err != nil {
 		return err
 	}
 
-	_, _, err = s.repo.FinishActiveMatch(ctx, req.RoomID, model.JSONB(resultJSON))
+	if req.ActorID != nil {
+		participants, participantsErr := s.repo.ListParticipants(ctx, req.RoomID)
+		if participantsErr != nil {
+			return participantsErr
+		}
+		if !containsParticipant(participants, *req.ActorID) {
+			return ErrForbidden
+		}
+	}
+
+	var result *model.JSONB
+	if len(req.Result) > 0 && string(req.Result) != "null" {
+		raw := model.JSONB(req.Result)
+		result = &raw
+	}
+
+	terminatedAt := time.Now().UTC()
+
+	_, _, err = s.repo.TerminateActiveMatch(ctx, req.RoomID, reason, result, req.ActorID, terminatedAt)
 	if err != nil {
 		switch {
 		case errors.Is(err, roomPostgres.ErrNotFound):
@@ -354,20 +364,49 @@ func (s *Service) FinishRoomMatch(ctx context.Context, req dto.FinishRoomMatchRe
 	return nil
 }
 
-func (s *Service) AbandonRoomMatch(ctx context.Context, roomID string, reason string) error {
-	_, _, err := s.repo.AbandonActiveMatch(ctx, roomID, reason)
-	if err != nil {
-		switch {
-		case errors.Is(err, roomPostgres.ErrActiveMatchNotFound):
-			return ErrActiveMatchNotFound
-		case errors.Is(err, roomPostgres.ErrNotFound):
-			return ErrRoomNotFound
-		default:
-			return err
+func (s *Service) MarkActorDisconnectedInActiveMatch(ctx context.Context, roomID, actorID string) error {
+	return s.repo.MarkActiveMatchPlayerDisconnected(ctx, roomID, actorID, time.Now().UTC())
+}
+
+func (s *Service) MarkActorReconnectedInActiveMatch(ctx context.Context, roomID, actorID string) error {
+	return s.repo.MarkActiveMatchPlayerConnected(ctx, roomID, actorID)
+}
+
+func (s *Service) LeaveActiveMatch(ctx context.Context, roomID, actorID string) error {
+	return s.FinishRoomMatch(ctx, dto.FinishRoomMatchRequest{
+		ActorID: &actorID,
+		RoomID:  roomID,
+		Reason:  string(model.MatchTerminationReasonPlayerLeft),
+	})
+}
+
+func (s *Service) TerminateRoomMatch(ctx context.Context, roomID string, reason model.MatchTerminationReason) error {
+	return s.FinishRoomMatch(ctx, dto.FinishRoomMatchRequest{
+		RoomID: roomID,
+		Reason: string(reason),
+	})
+}
+
+func normalizeMatchTerminationReason(reason string) (model.MatchTerminationReason, error) {
+	switch model.MatchTerminationReason(strings.TrimSpace(reason)) {
+	case model.MatchTerminationReasonNormalCompletion,
+		model.MatchTerminationReasonPlayerLeft,
+		model.MatchTerminationReasonReconnectTimeout,
+		model.MatchTerminationReasonRoomDeleted:
+		return model.MatchTerminationReason(strings.TrimSpace(reason)), nil
+	default:
+		return "", ErrInvalidMatchTerminationReason
+	}
+}
+
+func containsParticipant(participants []model.RoomParticipant, actorID string) bool {
+	for _, participant := range participants {
+		if participant.ActorID == actorID {
+			return true
 		}
 	}
 
-	return nil
+	return false
 }
 
 func (s *Service) DeleteRoom(ctx context.Context, req dto.DeleteRoomRequest) error {
@@ -449,29 +488,31 @@ func (s *Service) KickParticipant(ctx context.Context, req dto.KickParticipantRe
 	return &resp, nil
 }
 
-func (s *Service) CleanupStaleRooms(ctx context.Context, waitingTTL, playingTTL time.Duration) error {
+func (s *Service) CleanupStaleRooms(ctx context.Context, waitingTTL, playingTTL time.Duration) ([]string, error) {
 	now := time.Now().UTC()
 
 	waitingCutoff := now.Add(-waitingTTL)
 	playingCutoff := now.Add(-playingTTL)
 
-	playingRooms, err := s.repo.FindStaleEmptyPlayingRooms(ctx, playingCutoff)
+	playingRooms, err := s.repo.FindRoomsWithReconnectTimeout(ctx, playingCutoff)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	terminatedRoomIDs := make([]string, 0, len(playingRooms))
 	for _, room := range playingRooms {
-		if err := s.AbandonRoomMatch(ctx, room.ID, "reconnect_timeout"); err != nil {
+		if err := s.TerminateRoomMatch(ctx, room.ID, model.MatchTerminationReasonReconnectTimeout); err != nil {
 			if errors.Is(err, ErrActiveMatchNotFound) {
 				continue
 			}
-			return err
+			return nil, err
 		}
+		terminatedRoomIDs = append(terminatedRoomIDs, room.ID)
 	}
 
 	waitingRooms, err := s.repo.FindStaleEmptyWaitingRooms(ctx, waitingCutoff)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	for _, room := range waitingRooms {
@@ -482,11 +523,11 @@ func (s *Service) CleanupStaleRooms(ctx context.Context, waitingTTL, playingTTL 
 			if errors.Is(err, roomPostgres.ErrForbiddenDeleteActiveRoom) {
 				continue
 			}
-			return err
+			return nil, err
 		}
 	}
 
-	return nil
+	return terminatedRoomIDs, nil
 }
 
 func (s *Service) MarkRoomEmpty(ctx context.Context, roomID string) error {

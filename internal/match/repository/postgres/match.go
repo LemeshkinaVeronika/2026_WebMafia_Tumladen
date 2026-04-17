@@ -36,9 +36,9 @@ func (r *Repository) Create(ctx context.Context, match *model.Match, players []m
 func (r *Repository) createMatchTx(ctx context.Context, tx *sql.Tx, match *model.Match) error {
 	query := `
 		INSERT INTO matches (
-			id, room_id, game_type, status, game_state, result, created_at, updated_at
+			id, room_id, game_type, status, game_state, result, termination_reason, terminated_by_actor_id, terminated_at, created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	`
 
 	_, err := tx.ExecContext(
@@ -50,6 +50,9 @@ func (r *Repository) createMatchTx(ctx context.Context, tx *sql.Tx, match *model
 		match.Status,
 		match.GameState,
 		match.Result,
+		match.TerminationReason,
+		match.TerminatedByActorID,
+		match.TerminatedAt,
 		match.CreatedAt,
 		match.UpdatedAt,
 	)
@@ -99,7 +102,7 @@ func (r *Repository) GetActiveByRoomID(ctx context.Context, roomID string) (*mod
 	const op = "match.repository.postgres.GetActiveByRoomID"
 
 	query := `
-		SELECT id, room_id, game_type, status, game_state, result, created_at, updated_at
+		SELECT id, room_id, game_type, status, game_state, result, termination_reason, terminated_by_actor_id, terminated_at, created_at, updated_at
 		FROM matches
 		WHERE room_id = $1 AND status = 'active'
 		ORDER BY created_at DESC
@@ -114,6 +117,9 @@ func (r *Repository) GetActiveByRoomID(ctx context.Context, roomID string) (*mod
 		&match.Status,
 		&match.GameState,
 		&match.Result,
+		&match.TerminationReason,
+		&match.TerminatedByActorID,
+		&match.TerminatedAt,
 		&match.CreatedAt,
 		&match.UpdatedAt,
 	)
@@ -131,7 +137,7 @@ func (r *Repository) GetActiveByRoomID(ctx context.Context, roomID string) (*mod
 
 func (r *Repository) getMatchByID(ctx context.Context, matchID string) (*model.Match, error) {
 	query := `
-		SELECT id, room_id, game_type, status, game_state, result, created_at, updated_at
+		SELECT id, room_id, game_type, status, game_state, result, termination_reason, terminated_by_actor_id, terminated_at, created_at, updated_at
 		FROM matches
 		WHERE id = $1
 		LIMIT 1
@@ -145,6 +151,9 @@ func (r *Repository) getMatchByID(ctx context.Context, matchID string) (*model.M
 		&match.Status,
 		&match.GameState,
 		&match.Result,
+		&match.TerminationReason,
+		&match.TerminatedByActorID,
+		&match.TerminatedAt,
 		&match.CreatedAt,
 		&match.UpdatedAt,
 	)
@@ -157,7 +166,7 @@ func (r *Repository) getMatchByID(ctx context.Context, matchID string) (*model.M
 
 func (r *Repository) listMatchPlayers(ctx context.Context, matchID string) ([]model.MatchPlayer, error) {
 	query := `
-		SELECT match_id, actor_id, display_name, seat
+		SELECT match_id, actor_id, display_name, seat, disconnected_at
 		FROM match_players
 		WHERE match_id = $1
 		ORDER BY seat ASC
@@ -177,6 +186,7 @@ func (r *Repository) listMatchPlayers(ctx context.Context, matchID string) ([]mo
 			&player.ActorID,
 			&player.DisplayName,
 			&player.Seat,
+			&player.DisconnectedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -222,7 +232,7 @@ func (r *Repository) GetLastByRoomID(ctx context.Context, roomID string) (*model
 	const op = "match.repository.postgres.GetLastByRoomID"
 
 	query := `
-		SELECT id, room_id, game_type, status, game_state, result, created_at, updated_at
+		SELECT id, room_id, game_type, status, game_state, result, termination_reason, terminated_by_actor_id, terminated_at, created_at, updated_at
 		FROM matches
 		WHERE room_id = $1
 		ORDER BY created_at DESC
@@ -237,6 +247,9 @@ func (r *Repository) GetLastByRoomID(ctx context.Context, roomID string) (*model
 		&match.Status,
 		&match.GameState,
 		&match.Result,
+		&match.TerminationReason,
+		&match.TerminatedByActorID,
+		&match.TerminatedAt,
 		&match.CreatedAt,
 		&match.UpdatedAt,
 	)

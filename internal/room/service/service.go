@@ -21,14 +21,15 @@ type IRepository interface {
 
 	StartRoomWithMatch(ctx context.Context, roomID string, match *model.Match, players []model.MatchPlayer) (*model.Room, []model.RoomParticipant, error)
 
-	FinishActiveMatch(ctx context.Context, roomID string, result model.JSONB) (*model.Match, []model.MatchPlayer, error)
-	AbandonActiveMatch(ctx context.Context, roomID string, reason string) (*model.Match, []model.MatchPlayer, error)
+	TerminateActiveMatch(ctx context.Context, roomID string, reason model.MatchTerminationReason, result *model.JSONB, terminatedByActorID *string, terminatedAt time.Time) (*model.Match, []model.MatchPlayer, error)
+	MarkActiveMatchPlayerDisconnected(ctx context.Context, roomID, actorID string, disconnectedAt time.Time) error
+	MarkActiveMatchPlayerConnected(ctx context.Context, roomID, actorID string) error
+	FindRoomsWithReconnectTimeout(ctx context.Context, olderThan time.Time) ([]model.Room, error)
 	DeleteRoom(ctx context.Context, roomID string) error
 
 	KickParticipant(ctx context.Context, roomID, targetActorID string) error
 
 	FindStaleEmptyWaitingRooms(ctx context.Context, olderThan time.Time) ([]model.Room, error)
-	FindStaleEmptyPlayingRooms(ctx context.Context, olderThan time.Time) ([]model.Room, error)
 
 	MarkRoomEmpty(ctx context.Context, roomID string) error
 }

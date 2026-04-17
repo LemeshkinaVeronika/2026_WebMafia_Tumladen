@@ -2,7 +2,6 @@ package http
 
 import (
 	"encoding/json"
-	"github.com/go-chi/chi/v5"
 	"github.com/webmafia/tumladan/internal/middleware"
 	wsticketdto "github.com/webmafia/tumladan/internal/ws_ticket/dto"
 	"net/http"
@@ -26,8 +25,4 @@ func (h *Handler) CreateTicket(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(wsticketdto.CreateTicketResponse{
 		Ticket: ticket,
 	})
-}
-
-func (h *Handler) RegisterProtectedRoutes(r chi.Router) {
-	r.MethodFunc(http.MethodPost, "/ws-ticket", h.CreateTicket)
 }

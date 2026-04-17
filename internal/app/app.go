@@ -68,7 +68,7 @@ func New(ctx context.Context) (*App, error) {
 	roomHandler := roomHTTP.NewHandler(roomSvc)
 
 	matchRepo := matchPostgres.New(db)
-	matchSvc := matchService.New(matchRepo)
+	matchSvc := matchService.New(matchRepo, roomSvc)
 
 	wsTicketStore := wsticketStore.NewStore(1 * time.Minute)
 	wsTicketSvc := wsticketService.NewService(wsTicketStore)
@@ -95,6 +95,7 @@ func New(ctx context.Context) (*App, error) {
 		},
 		healthHandler(logger, db),
 		authMiddleware,
+		logger,
 		cfg.CORS,
 	)
 
@@ -171,8 +172,14 @@ func (a *App) runRoomCleanup() {
 		case <-a.ctx.Done():
 			return
 		case <-ticker.C:
-			if err := a.roomSvc.CleanupStaleRooms(a.ctx, a.cfg.RoomWaitingCleanupTTL, a.cfg.RoomPlayingCleanupTTL); err != nil {
+			terminatedRoomIDs, err := a.roomSvc.CleanupStaleRooms(a.ctx, a.cfg.RoomWaitingCleanupTTL, a.cfg.RoomPlayingCleanupTTL)
+			if err != nil {
 				a.logger.Errorf("room cleanup failed error=%v", err)
+				continue
+			}
+
+			for _, roomID := range terminatedRoomIDs {
+				a.ws.NotifyMatchFinished(a.ctx, roomID)
 			}
 		}
 	}
@@ -198,7 +205,7 @@ func healthHandler(logger logger.Logger, db *sql.DB) http.HandlerFunc {
 		defer cancel()
 
 		if err := db.PingContext(ctx); err != nil {
-			logger.Errorf("healthcheck failed error=%v", err)
+			middleware.LoggerFromContextOr(ctx, logger).With("error", err).Errorf("healthcheck failed")
 			http.Error(w, "db unavailable", http.StatusServiceUnavailable)
 			return
 		}

@@ -58,10 +58,18 @@ func (rw *responseWriter) WriteHeader(statusCode int) {
 }
 
 func LoggerFromContext(ctx context.Context) logger.Logger {
+	return LoggerFromContextOr(ctx, nil)
+}
+
+func LoggerFromContextOr(ctx context.Context, fallback logger.Logger) logger.Logger {
 	log, ok := ctx.Value(loggerKey).(logger.Logger)
-	if !ok {
-		l, _ := logger.New("error", logger.ModeDev)
-		return l
+	if ok && log != nil {
+		return log
 	}
-	return log
+	if fallback != nil {
+		return fallback
+	}
+
+	l, _ := logger.New("error", logger.ModeDev)
+	return l
 }

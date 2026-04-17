@@ -110,6 +110,21 @@ func (r *Registry) LocalClientsForActor(roomID, actorID string) []*centrifuge.Cl
 	return clients
 }
 
+func (r *Registry) HasLocalClientForActor(roomID, actorID string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	clientIDs := r.rooms[roomID]
+	for clientID := range clientIDs {
+		state, ok := r.connections[clientID]
+		if ok && state.Actor.ID == actorID && state.Client != nil {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (r *Registry) WithClientLock(clientID string, fn func(state *ConnectionState)) bool {
 	r.mu.RLock()
 	state, ok := r.connections[clientID]

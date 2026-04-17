@@ -80,8 +80,10 @@ type GetRoomByInviteCodeResponse struct {
 }
 
 type FinishRoomMatchRequest struct {
-	ActorID string `json:"actorId"`
-	RoomID  string `json:"roomId"`
+	ActorID *string         `json:"actorId,omitempty"`
+	RoomID  string          `json:"roomId"`
+	Reason  string          `json:"reason"`
+	Result  json.RawMessage `json:"result,omitempty"`
 }
 
 type DeleteRoomRequest struct {

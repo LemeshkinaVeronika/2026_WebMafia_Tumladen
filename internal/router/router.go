@@ -9,6 +9,7 @@ import (
 	roomDelivery "github.com/webmafia/tumladan/internal/room/delivery/http"
 	internalws "github.com/webmafia/tumladan/internal/ws"
 	wsticketDelivery "github.com/webmafia/tumladan/internal/ws_ticket/delivery/http"
+	"github.com/webmafia/tumladan/pkg/logger"
 )
 
 type AppHandlers struct {
@@ -19,10 +20,13 @@ type AppHandlers struct {
 	WSTicketHandler *wsticketDelivery.Handler
 }
 
-func NewRouter(handlers AppHandlers, healthHandler http.HandlerFunc, auth *middleware.Auth, cors middleware.CORSConfig) *chi.Mux {
+func NewRouter(handlers AppHandlers, healthHandler http.HandlerFunc, auth *middleware.Auth, log logger.Logger, cors middleware.CORSConfig) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(middleware.CORS(cors))
+	if log != nil {
+		r.Use(middleware.RequestLoggerMiddleware(log))
+	}
 
 	r.Get("/health", healthHandler)
 

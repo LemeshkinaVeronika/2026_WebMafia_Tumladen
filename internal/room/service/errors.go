@@ -16,6 +16,7 @@ var (
 	ErrMaxPlayersLessThanParticipants = errors.New("max players is less than current participants count")
 	ErrInvalidRoomSettings            = errors.New("invalid room settings")
 	ErrActiveMatchNotFound            = errors.New("active match not found")
+	ErrInvalidMatchTerminationReason  = errors.New("invalid match termination reason")
 	ErrParticipantNotFound            = errors.New("participant not found")
 	ErrCannotKickYourself             = errors.New("cannot kick yourself")
 	ErrRoomModerationLocked           = errors.New("room moderation is locked")
