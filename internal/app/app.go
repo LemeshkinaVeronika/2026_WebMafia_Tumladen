@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"time"
 
+	carcassonneService "github.com/webmafia/tumladan/internal/game/carcassonne/service"
+	gameService "github.com/webmafia/tumladan/internal/game/service"
 	guestHTTP "github.com/webmafia/tumladan/internal/guest/delivery/http"
 	guestPostgres "github.com/webmafia/tumladan/internal/guest/repository/postgres"
 	guestService "github.com/webmafia/tumladan/internal/guest/service"
@@ -59,22 +61,30 @@ func New(ctx context.Context) (*App, error) {
 	jwtProvider := jwtprovider.New(cfg.JWTSecret, cfg.JWTTTL)
 	authMiddleware := middleware.NewAuth(jwtProvider)
 
+	gamesRegistry, err := gameService.NewRegistry(carcassonneService.NewEngine())
+	if err != nil {
+		stop()
+		_ = db.Close()
+		return nil, err
+	}
+	gamesFacade := gameService.NewFacade(gamesRegistry)
+
 	guestRepo := guestPostgres.New(db)
 	guestSvc := guestService.New(guestRepo, jwtProvider)
 	guestHandler := guestHTTP.NewHandler(guestSvc)
 
 	roomRepo := roomPostgres.New(db)
-	roomSvc := roomService.New(roomRepo)
+	roomSvc := roomService.New(roomRepo, gamesFacade)
 	roomHandler := roomHTTP.NewHandler(roomSvc)
 
 	matchRepo := matchPostgres.New(db)
-	matchSvc := matchService.New(matchRepo, roomSvc)
+	matchSvc := matchService.New(matchRepo, roomSvc, gamesFacade)
 
 	wsTicketStore := wsticketStore.NewStore(1 * time.Minute)
 	wsTicketSvc := wsticketService.NewService(wsTicketStore)
 	wsTicketHandler := wsticketHTTP.NewHandler(wsTicketSvc)
 
-	wsHandler, err := internalws.NewHandler(roomSvc, matchSvc, wsTicketSvc, logger)
+	wsHandler, err := internalws.NewHandler(roomSvc, matchSvc, wsTicketSvc, gamesFacade, cfg.CORS, logger)
 	if err != nil {
 		stop()
 		_ = db.Close()

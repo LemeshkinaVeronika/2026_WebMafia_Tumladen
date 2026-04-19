@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/centrifugal/centrifuge"
 	"github.com/go-chi/chi/v5"
+	gameService "github.com/webmafia/tumladan/internal/game/service"
 	matchDTO "github.com/webmafia/tumladan/internal/match/dto"
 	matchService "github.com/webmafia/tumladan/internal/match/service"
 	"github.com/webmafia/tumladan/internal/middleware"
@@ -33,6 +35,7 @@ type Handler struct {
 	roomService       *roomService.Service
 	matchService      *matchService.Service
 	ticketService     *wsticket.Service
+	games             *gameService.Facade
 	node              *centrifuge.Node
 	registry          *Registry
 	logger            logger.Logger
@@ -45,6 +48,7 @@ type Handler struct {
 type MessageHandler struct {
 	roomService  *roomService.Service
 	matchService *matchService.Service
+	games        *gameService.Facade
 	node         *centrifuge.Node
 	registry     *Registry
 	logger       logger.Logger
@@ -65,10 +69,16 @@ type PublicMatchState struct {
 	UpdatedAt           string                         `json:"updatedAt"`
 }
 
+type PrivateMatchState struct {
+	IsYourTurn bool `json:"isYourTurn"`
+}
+
 func NewHandler(
 	roomService *roomService.Service,
 	matchService *matchService.Service,
 	ticketService *wsticket.Service,
+	games *gameService.Facade,
+	cors middleware.CORSConfig,
 	logger logger.Logger,
 ) (*Handler, error) {
 	node, err := centrifuge.New(centrifuge.Config{})
@@ -80,6 +90,7 @@ func NewHandler(
 		roomService:   roomService,
 		matchService:  matchService,
 		ticketService: ticketService,
+		games:         games,
 		node:          node,
 		registry:      NewRegistry(),
 		logger:        logger,
@@ -88,12 +99,24 @@ func NewHandler(
 	h.node.OnConnecting(h.onConnecting)
 	h.node.OnConnect(h.onConnect)
 
-	h.websocketHandler = h.wrapTransportHandler(centrifuge.NewWebsocketHandler(node, centrifuge.WebsocketConfig{}))
+	h.websocketHandler = h.wrapTransportHandler(centrifuge.NewWebsocketHandler(node, centrifuge.WebsocketConfig{
+		CheckOrigin: websocketOriginCheck(cors),
+	}))
 	h.httpStreamHandler = h.wrapTransportHandler(centrifuge.NewHTTPStreamHandler(node, centrifuge.HTTPStreamConfig{}))
 	h.sseHandler = h.wrapTransportHandler(centrifuge.NewSSEHandler(node, centrifuge.SSEConfig{}))
 	h.emulationHandler = h.wrapTransportHandler(centrifuge.NewEmulationHandler(node, centrifuge.EmulationConfig{}))
 
 	return h, nil
+}
+
+func websocketOriginCheck(cors middleware.CORSConfig) func(r *http.Request) bool {
+	return func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true
+		}
+		return middleware.IsOriginAllowed(origin, cors.AllowedOrigins)
+	}
 }
 
 func (h *Handler) Run() error {
@@ -196,6 +219,7 @@ func (h *Handler) onConnect(client *centrifuge.Client) {
 	messageHandler := &MessageHandler{
 		roomService:  h.roomService,
 		matchService: h.matchService,
+		games:        h.games,
 		node:         h.node,
 		registry:     h.registry,
 		logger:       h.logger,
@@ -615,7 +639,7 @@ func (h *MessageHandler) broadcastRoomState(ctx context.Context, roomID string, 
 	h.publish(ctx, roomChannel(roomID), msg)
 }
 
-func (h *MessageHandler) sendMatchState(state *ConnectionState, matchState any) {
+func (h *MessageHandler) sendMatchState(state *ConnectionState, matchState *matchDTO.MatchResponse) {
 	if state == nil || state.Client == nil {
 		return
 	}
@@ -627,11 +651,11 @@ func (h *MessageHandler) sendMatchState(state *ConnectionState, matchState any) 
 	})
 	h.sendServerMessage(client, ServerMessage{
 		Type:    "match_private_state",
-		Payload: privateMatchStatePayload(matchState, state.Actor.ID),
+		Payload: h.privateMatchStatePayload(client.Context(), matchState, state.Actor.ID),
 	})
 }
 
-func (h *MessageHandler) broadcastMatchState(ctx context.Context, roomID string, matchState any) {
+func (h *MessageHandler) broadcastMatchState(ctx context.Context, roomID string, matchState *matchDTO.MatchResponse) {
 	h.broadcastMatchEvent(ctx, roomID, "match_state", h.publicMatchStatePayload(ctx, matchState))
 	h.broadcastPrivateMatchState(ctx, roomID, matchState)
 }
@@ -686,11 +710,11 @@ func (h *MessageHandler) broadcastMatchEvent(ctx context.Context, roomID, eventT
 	h.publish(ctx, matchChannel(roomID), msg)
 }
 
-func (h *MessageHandler) broadcastPrivateMatchState(ctx context.Context, roomID string, matchState any) {
+func (h *MessageHandler) broadcastPrivateMatchState(ctx context.Context, roomID string, matchState *matchDTO.MatchResponse) {
 	for _, actorID := range actorIDsForMatchState(matchState) {
 		msg, err := json.Marshal(ServerMessage{
 			Type:    "match_private_state",
-			Payload: privateMatchStatePayload(matchState, actorID),
+			Payload: h.privateMatchStatePayload(ctx, matchState, actorID),
 		})
 		if err != nil {
 			h.loggerFromContext(ctx).With("roomID", roomID, "actorID", actorID, "error", err).Warnf("marshal private match state failed")
@@ -1013,18 +1037,13 @@ func roomPrivateChannel(roomID, actorID string) string {
 	return "room_private:" + roomID + ":" + actorID
 }
 
-func actorIDsForMatchState(matchState any) []string {
-	resp, ok := matchState.(*matchDTO.MatchResponse)
-	if !ok {
-		respValue, ok := matchState.(matchDTO.MatchResponse)
-		if !ok {
-			return nil
-		}
-		resp = &respValue
+func actorIDsForMatchState(matchState *matchDTO.MatchResponse) []string {
+	if matchState == nil {
+		return nil
 	}
 
-	actorIDs := make([]string, 0, len(resp.Players))
-	for _, player := range resp.Players {
+	actorIDs := make([]string, 0, len(matchState.Players))
+	for _, player := range matchState.Players {
 		if player.ActorID == "" {
 			continue
 		}
@@ -1034,71 +1053,106 @@ func actorIDsForMatchState(matchState any) []string {
 	return actorIDs
 }
 
-func (h *MessageHandler) publicMatchStatePayload(ctx context.Context, matchState any) any {
-	resp, ok := matchState.(*matchDTO.MatchResponse)
-	if ok {
-		return PublicMatchState{
-			ID:                  resp.ID,
-			RoomID:              resp.RoomID,
-			GameType:            resp.GameType,
-			Status:              resp.Status,
-			GameState:           resp.GameState,
-			Result:              resp.Result,
-			TerminationReason:   resp.TerminationReason,
-			TerminatedByActorID: resp.TerminatedByActorID,
-			TerminatedAt:        resp.TerminatedAt,
-			Players:             resp.Players,
-			CreatedAt:           resp.CreatedAt,
-			UpdatedAt:           resp.UpdatedAt,
+func modelMatchFromResponse(resp *matchDTO.MatchResponse) (*model.Match, []model.MatchPlayer) {
+	match := &model.Match{
+		ID:        resp.ID,
+		RoomID:    resp.RoomID,
+		GameType:  resp.GameType,
+		Status:    model.MatchStatus(resp.Status),
+		GameState: model.JSONB(resp.GameState),
+		Result:    jsonbPtr(resp.Result),
+		CreatedAt: parseTimeOrZero(resp.CreatedAt),
+		UpdatedAt: parseTimeOrZero(resp.UpdatedAt),
+	}
+
+	if resp.TerminationReason != nil {
+		reason := model.MatchTerminationReason(*resp.TerminationReason)
+		match.TerminationReason = &reason
+	}
+	match.TerminatedByActorID = resp.TerminatedByActorID
+	if resp.TerminatedAt != nil {
+		terminatedAt := parseTimeOrZero(*resp.TerminatedAt)
+		if !terminatedAt.IsZero() {
+			match.TerminatedAt = &terminatedAt
 		}
 	}
 
-	respValue, ok := matchState.(matchDTO.MatchResponse)
-	if ok {
-		return PublicMatchState{
-			ID:                  respValue.ID,
-			RoomID:              respValue.RoomID,
-			GameType:            respValue.GameType,
-			Status:              respValue.Status,
-			GameState:           respValue.GameState,
-			Result:              respValue.Result,
-			TerminationReason:   respValue.TerminationReason,
-			TerminatedByActorID: respValue.TerminatedByActorID,
-			TerminatedAt:        respValue.TerminatedAt,
-			Players:             respValue.Players,
-			CreatedAt:           respValue.CreatedAt,
-			UpdatedAt:           respValue.UpdatedAt,
-		}
+	players := make([]model.MatchPlayer, 0, len(resp.Players))
+	for _, player := range resp.Players {
+		players = append(players, model.MatchPlayer{
+			MatchID:     resp.ID,
+			ActorID:     player.ActorID,
+			DisplayName: player.DisplayName,
+			Seat:        player.Seat,
+		})
 	}
 
-	h.loggerFromContext(ctx).With("type", matchState).Warnf("unsupported match state payload type")
-	return map[string]any{}
+	return match, players
 }
 
-func privateMatchStatePayload(matchState any, actorID string) any {
-	resp, ok := matchState.(*matchDTO.MatchResponse)
-	if !ok {
-		respValue, ok := matchState.(matchDTO.MatchResponse)
-		if !ok {
-			return map[string]any{}
-		}
-		resp = &respValue
+func parseTimeOrZero(value string) time.Time {
+	if value == "" {
+		return time.Time{}
 	}
 
-	isYourTurn := false
-
-	var state struct {
-		CurrentPlayerID string `json:"currentPlayerId"`
-	}
-	if len(resp.GameState) > 0 && json.Unmarshal(resp.GameState, &state) == nil {
-		isYourTurn = state.CurrentPlayerID != "" && state.CurrentPlayerID == actorID
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return time.Time{}
 	}
 
-	return struct {
-		IsYourTurn bool `json:"isYourTurn"`
-	}{
-		IsYourTurn: isYourTurn,
+	return parsed
+}
+
+func jsonbPtr(raw json.RawMessage) *model.JSONB {
+	if len(raw) == 0 || strings.TrimSpace(string(raw)) == "null" {
+		return nil
 	}
+
+	value := model.JSONB(raw)
+	return &value
+}
+
+func (h *MessageHandler) publicMatchStatePayload(ctx context.Context, matchState *matchDTO.MatchResponse) PublicMatchState {
+	if matchState == nil {
+		return PublicMatchState{}
+	}
+
+	match, players := modelMatchFromResponse(matchState)
+	gameState, err := h.games.BuildPublicState(match, players)
+	if err != nil {
+		h.loggerFromContext(ctx).With("matchID", matchState.ID, "gameType", matchState.GameType, "error", err).Warnf("build public match state failed")
+		gameState = matchState.GameState
+	}
+
+	return PublicMatchState{
+		ID:                  matchState.ID,
+		RoomID:              matchState.RoomID,
+		GameType:            matchState.GameType,
+		Status:              matchState.Status,
+		GameState:           gameState,
+		Result:              matchState.Result,
+		TerminationReason:   matchState.TerminationReason,
+		TerminatedByActorID: matchState.TerminatedByActorID,
+		TerminatedAt:        matchState.TerminatedAt,
+		Players:             matchState.Players,
+		CreatedAt:           matchState.CreatedAt,
+		UpdatedAt:           matchState.UpdatedAt,
+	}
+}
+
+func (h *MessageHandler) privateMatchStatePayload(ctx context.Context, matchState *matchDTO.MatchResponse, actorID string) any {
+	if matchState == nil {
+		return PrivateMatchState{}
+	}
+
+	match, players := modelMatchFromResponse(matchState)
+	privateState, err := h.games.BuildPrivateState(match, players, actorID)
+	if err != nil {
+		h.loggerFromContext(ctx).With("matchID", matchState.ID, "gameType", matchState.GameType, "actorID", actorID, "error", err).Warnf("build private match state failed")
+		return PrivateMatchState{}
+	}
+
+	return json.RawMessage(privateState)
 }
 
 func (h *MessageHandler) broadcastMatchFinished(ctx context.Context, roomID string) {
@@ -1117,6 +1171,7 @@ func (h *Handler) NotifyMatchFinished(ctx context.Context, roomID string) {
 	messageHandler := &MessageHandler{
 		roomService:  h.roomService,
 		matchService: h.matchService,
+		games:        h.games,
 		node:         h.node,
 		registry:     h.registry,
 		logger:       h.logger,

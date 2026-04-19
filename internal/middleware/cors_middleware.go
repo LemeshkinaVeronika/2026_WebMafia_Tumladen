@@ -20,7 +20,7 @@ func CORS(config CORSConfig) func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			origin := r.Header.Get("Origin")
 
-			if isOriginAllowed(origin, config.AllowedOrigins) {
+			if IsOriginAllowed(origin, config.AllowedOrigins) {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 
 				if config.AllowCredentials {
@@ -41,7 +41,7 @@ func CORS(config CORSConfig) func(next http.Handler) http.Handler {
 	}
 }
 
-func isOriginAllowed(origin string, allowedOrigins []string) bool {
+func IsOriginAllowed(origin string, allowedOrigins []string) bool {
 	for _, o := range allowedOrigins {
 		if o == origin {
 			return true

@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
-	"github.com/webmafia/tumladan/internal/model"
 	"time"
+
+	gameService "github.com/webmafia/tumladan/internal/game/service"
+	"github.com/webmafia/tumladan/internal/model"
 )
 
 type IRepository interface {
@@ -35,9 +37,13 @@ type IRepository interface {
 }
 
 type Service struct {
-	repo IRepository
+	repo  IRepository
+	games *gameService.Facade
 }
 
-func New(repo IRepository) *Service {
-	return &Service{repo: repo}
+func New(repo IRepository, games *gameService.Facade) *Service {
+	return &Service{
+		repo:  repo,
+		games: games,
+	}
 }

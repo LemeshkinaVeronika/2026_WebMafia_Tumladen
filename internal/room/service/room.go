@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	matchService "github.com/webmafia/tumladan/internal/match/service"
+	gameService "github.com/webmafia/tumladan/internal/game/service"
 	"github.com/webmafia/tumladan/internal/model"
 	"github.com/webmafia/tumladan/internal/room/dto"
 	roomPostgres "github.com/webmafia/tumladan/internal/room/repository/postgres"
@@ -20,15 +20,7 @@ const (
 
 	defaultGameType   = "carcassonne"
 	defaultMaxPlayers = 2
-
-	carcassonneMinPlayers      = 2
-	carcassonneMaxPlayers      = 6
-	carcassonneDefaultTurnTime = 120
-	carcassonneMinTurnTime     = 30
-	carcassonneMaxTurnTime     = 300
 )
-
-//TODO: add ErrorOf + mapping
 
 func roomToResponse(room model.Room) dto.RoomResponse {
 	return dto.RoomResponse{
@@ -79,9 +71,12 @@ func (s *Service) CreateRoom(ctx context.Context, req dto.CreateRoomServiceReque
 	now := time.Now().UTC()
 	inviteCode := generateInviteCode()
 
-	settings, err := normalizeRoomSettings(defaultGameType, nil)
+	settings, err := s.games.NormalizeRoomSettings(defaultGameType, nil)
 	if err != nil {
-		return nil, err
+		return nil, mapGameRoomError(err)
+	}
+	if err := s.games.ValidateRoomConfig(defaultGameType, defaultMaxPlayers, settings); err != nil {
+		return nil, mapGameRoomError(err)
 	}
 
 	room := &model.Room{
@@ -232,23 +227,18 @@ func (s *Service) UpdateRoomSettings(ctx context.Context, req dto.UpdateRoomSett
 		return nil, ErrInvalidMaxPlayers
 	}
 
-	switch gameType {
-	case "carcassonne":
-		if maxPlayers < carcassonneMinPlayers || maxPlayers > carcassonneMaxPlayers {
-			return nil, ErrInvalidMaxPlayers
-		}
-	default:
-		return nil, ErrInvalidGameType
-	}
-
 	settingsRaw := req.Settings
 	if len(settingsRaw) == 0 {
 		settingsRaw = json.RawMessage(room.Settings)
 	}
 
-	settings, err := normalizeRoomSettings(gameType, settingsRaw)
+	settings, err := s.games.NormalizeRoomSettings(gameType, settingsRaw)
 	if err != nil {
-		return nil, err
+		return nil, mapGameRoomError(err)
+	}
+
+	if err := s.games.ValidateRoomConfig(gameType, maxPlayers, settings); err != nil {
+		return nil, mapGameRoomError(err)
 	}
 
 	updatedRoom, participants, err := s.repo.UpdateSettings(ctx, req.RoomID, name, gameType, maxPlayers, settings)
@@ -295,9 +285,9 @@ func (s *Service) StartRoom(ctx context.Context, req dto.StartRoomRequest) (*dto
 		return nil, ErrNotEnoughPlayers
 	}
 
-	match, matchPlayers, err := matchService.BuildInitialMatch(room, participants)
+	match, matchPlayers, err := s.games.BuildInitialMatch(room, participants)
 	if err != nil {
-		return nil, err
+		return nil, mapGameRoomError(err)
 	}
 
 	updatedRoom, updatedParticipants, err := s.repo.StartRoomWithMatch(ctx, req.RoomID, match, matchPlayers)
@@ -316,6 +306,19 @@ func (s *Service) StartRoom(ctx context.Context, req dto.StartRoomRequest) (*dto
 
 	resp := roomWithParticipantsToResponse(*updatedRoom, updatedParticipants)
 	return &resp, nil
+}
+
+func mapGameRoomError(err error) error {
+	switch {
+	case errors.Is(err, gameService.ErrUnsupportedGameType):
+		return ErrInvalidGameType
+	case errors.Is(err, gameService.ErrInvalidRoomConfig):
+		return ErrInvalidMaxPlayers
+	case errors.Is(err, gameService.ErrInvalidRoomSettings):
+		return ErrInvalidRoomSettings
+	default:
+		return err
+	}
 }
 
 func (s *Service) FinishRoomMatch(ctx context.Context, req dto.FinishRoomMatchRequest) error {

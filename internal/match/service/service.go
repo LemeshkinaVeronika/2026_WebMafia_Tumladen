@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 
+	gameService "github.com/webmafia/tumladan/internal/game/service"
 	"github.com/webmafia/tumladan/internal/model"
 	roomDTO "github.com/webmafia/tumladan/internal/room/dto"
 )
@@ -22,11 +23,13 @@ type MatchTerminator interface {
 type Service struct {
 	repo       IRepository
 	terminator MatchTerminator
+	games      *gameService.Facade
 }
 
-func New(repo IRepository, terminator MatchTerminator) *Service {
+func New(repo IRepository, terminator MatchTerminator, games *gameService.Facade) *Service {
 	return &Service{
 		repo:       repo,
 		terminator: terminator,
+		games:      games,
 	}
 }

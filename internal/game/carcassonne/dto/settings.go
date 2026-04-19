@@ -1,5 +1,5 @@
 package dto
 
-type CarcassonneRoomSettings struct {
+type RoomSettings struct {
 	TurnTimeSeconds int `json:"turnTimeSeconds"`
 }
