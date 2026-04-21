@@ -12,11 +12,39 @@ type PlayerState struct {
 	MeeplesLeft int    `json:"meeplesLeft"`
 }
 
-type Tile struct {
-	ID string `json:"id"`
+type PublicGameState struct {
+	Version         int           `json:"version"`
+	Phase           Phase         `json:"phase"`
+	TurnNumber      int           `json:"turnNumber"`
+	CurrentPlayerID string        `json:"currentPlayerId"`
+	Players         []PlayerState `json:"players"`
+	Board           []PlacedTile  `json:"board"`
+	CurrentTile     *TileView     `json:"currentTile,omitempty"`
+	DeckRemaining   int           `json:"deckRemaining"`
+	Settings        MatchSettings `json:"settings"`
+}
+
+type GameState struct {
+	Version         int            `json:"version"`
+	Phase           Phase          `json:"phase"`
+	TurnNumber      int            `json:"turnNumber"`
+	CurrentPlayerID string         `json:"currentPlayerId"`
+	Players         []PlayerState  `json:"players"`
+	Board           []PlacedTile   `json:"board"`
+	Settings        MatchSettings  `json:"settings"`
+	DeckRemaining   []TileInstance `json:"deckRemaining"`
+	CurrentTile     *TileInstance  `json:"currentTile,omitempty"`
+	LastPlacedTile  *PlacedTile    `json:"lastPlacedTile,omitempty"`
+	Meeples         []PlacedMeeple `json:"meeples"`
+}
+
+type TileInstance struct {
+	InstanceID string `json:"instanceId"`
+	TileID     string `json:"tileId"`
 }
 
 type PlacedTile struct {
+	InstanceID string `json:"instanceId"`
 	TileID     string `json:"tileId"`
 	X          int    `json:"x"`
 	Y          int    `json:"y"`
@@ -25,26 +53,25 @@ type PlacedTile struct {
 	TurnNumber int    `json:"turnNumber"`
 }
 
-type GameState struct {
-	Version         int           `json:"version"`
-	Phase           string        `json:"phase"`
-	TurnNumber      int           `json:"turnNumber"`
-	CurrentPlayerID string        `json:"currentPlayerId"`
-	Players         []PlayerState `json:"players"`
-	Board           []PlacedTile  `json:"board"`
-	CurrentTile     *Tile         `json:"currentTile,omitempty"`
-	DeckRemaining   int           `json:"deckRemaining"`
-	Settings        MatchSettings `json:"settings"`
+type PlacedMeeple struct {
+	TileInstanceID string `json:"tileInstanceId"`
+	ZoneID         string `json:"zoneId"`
+	ActorID        string `json:"actorId"`
 }
 
-type PublicGameState struct {
-	Version         int           `json:"version"`
-	Phase           string        `json:"phase"`
-	TurnNumber      int           `json:"turnNumber"`
-	CurrentPlayerID string        `json:"currentPlayerId"`
-	Players         []PlayerState `json:"players"`
-	Board           []PlacedTile  `json:"board"`
-	CurrentTile     *Tile         `json:"currentTile,omitempty"`
-	DeckRemaining   int           `json:"deckRemaining"`
-	Settings        MatchSettings `json:"settings"`
+type TileView struct {
+	TileID   string `json:"tileId"`
+	ImageKey string `json:"imageKey"`
+}
+
+type PrivateGameState struct {
+	AllowedTilePlacements []AllowedTilePlacement `json:"allowedTilePlacements,omitempty"`
+	AllowedMeepleZones    []string               `json:"allowedMeepleZones,omitempty"`
+	CanSkipMeeple         bool                   `json:"canSkipMeeple"`
+}
+
+type AllowedTilePlacement struct {
+	X        int `json:"x"`
+	Y        int `json:"y"`
+	Rotation int `json:"rotation"`
 }

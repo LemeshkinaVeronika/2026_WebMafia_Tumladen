@@ -1,0 +1,918 @@
+[
+  {
+    "tileId": "start_tile",
+    "imageKey": "start_tile.png",
+    "count": 0,
+    "edges": {
+      "top": "city",
+      "right": "road",
+      "bottom": "field",
+      "left": "road"
+    },
+    "zones": [
+      {
+        "zoneId": "city_1",
+        "type": "city",
+        "segments": ["top_left", "top_center", "top_right"]
+      },
+      {
+        "zoneId": "road_1",
+        "type": "road",
+        "segments": ["left_center", "center", "right_center"]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": [
+          "left_top",
+          "left_bottom",
+          "bottom_left",
+          "bottom_center",
+          "bottom_right",
+          "right_top",
+          "right_bottom"
+        ]
+      }
+    ]
+  },
+  {
+    "tileId": "monastery_road",
+    "imageKey": "monastery_road.png",
+    "count": 2,
+    "edges": {
+      "top": "field",
+      "right": "field",
+      "bottom": "road",
+      "left": "field"
+    },
+    "zones": [
+      {
+        "zoneId": "monastery_1",
+        "type": "monastery",
+        "segments": ["center"]
+      },
+      {
+        "zoneId": "road_1",
+        "type": "road",
+        "segments": ["bottom_center"]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": [
+          "top_left",
+          "top_center",
+          "top_right",
+          "right_top",
+          "right_center",
+          "right_bottom",
+          "bottom_left",
+          "bottom_right",
+          "left_bottom",
+          "left_center",
+          "left_top"
+        ]
+      }
+    ]
+  },
+  {
+    "tileId": "monastery",
+    "imageKey": "monastery.png",
+    "count": 4,
+    "edges": {
+      "top": "field",
+      "right": "field",
+      "bottom": "field",
+      "left": "field"
+    },
+    "zones": [
+      {
+        "zoneId": "monastery_1",
+        "type": "monastery",
+        "segments": ["center"]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": [
+          "top_left",
+          "top_center",
+          "top_right",
+          "right_top",
+          "right_center",
+          "right_bottom",
+          "bottom_left",
+          "bottom_center",
+          "bottom_right",
+          "left_bottom",
+          "left_center",
+          "left_top"
+        ]
+      }
+    ]
+  },
+  {
+    "tileId": "city_full_shield",
+    "imageKey": "city_full_shield.png",
+    "count": 1,
+    "edges": {
+      "top": "city",
+      "right": "city",
+      "bottom": "city",
+      "left": "city"
+    },
+    "zones": [
+      {
+        "zoneId": "city_1",
+        "type": "city",
+        "hasPennant": true,
+        "segments": [
+          "top_left",
+          "top_center",
+          "top_right",
+          "right_top",
+          "right_center",
+          "right_bottom",
+          "bottom_left",
+          "bottom_center",
+          "bottom_right",
+          "left_bottom",
+          "left_center",
+          "left_top",
+          "center"
+        ]
+      }
+    ]
+  },
+  {
+    "tileId": "city_road_straight",
+    "imageKey": "city_road_straight.png",
+    "count": 4,
+    "edges": {
+      "top": "road",
+      "right": "city",
+      "bottom": "road",
+      "left": "field"
+    },
+    "zones": [
+      {
+        "zoneId": "city_1",
+        "type": "city",
+        "segments": ["right_top", "right_center", "right_bottom"]
+      },
+      {
+        "zoneId": "road_1",
+        "type": "road",
+        "segments": ["top_center", "center", "bottom_center"]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": ["top_left", "left_top", "left_center", "left_bottom", "bottom_left"]
+      },
+      {
+        "zoneId": "field_2",
+        "type": "field",
+        "segments": ["top_right", "bottom_right"]
+      }
+    ]
+  },
+  {
+    "tileId": "city_cap",
+    "imageKey": "city_cap.png",
+    "count": 2,
+    "edges": {
+      "top": "city",
+      "right": "field",
+      "bottom": "field",
+      "left": "field"
+    },
+    "zones": [
+      {
+        "zoneId": "city_1",
+        "type": "city",
+        "segments": ["top_left", "top_center", "top_right"]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": [
+          "right_top",
+          "right_center",
+          "right_bottom",
+          "bottom_left",
+          "bottom_center",
+          "bottom_right",
+          "left_bottom",
+          "left_center",
+          "left_top",
+          "center"
+        ]
+      }
+    ]
+  },
+  {
+    "tileId": "city_straight_shield",
+    "imageKey": "city_straight_shield.png",
+    "count": 2,
+    "edges": {
+      "top": "field",
+      "right": "city",
+      "bottom": "field",
+      "left": "city"
+    },
+    "zones": [
+      {
+        "zoneId": "city_1",
+        "type": "city",
+        "hasPennant": true,
+        "segments": [
+          "right_top",
+          "right_center",
+          "right_bottom",
+          "left_bottom",
+          "left_center",
+          "left_top",
+          "center"
+        ]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": ["top_left", "top_center", "top_right"]
+      },
+      {
+        "zoneId": "field_2",
+        "type": "field",
+        "segments": ["bottom_left", "bottom_center", "bottom_right"]
+      }
+    ]
+  },
+  {
+    "tileId": "city_straight",
+    "imageKey": "city_straight.png",
+    "count": 1,
+    "edges": {
+      "top": "city",
+      "right": "field",
+      "bottom": "city",
+      "left": "field"
+    },
+    "zones": [
+      {
+        "zoneId": "city_1",
+        "type": "city",
+        "segments": [
+          "top_left",
+          "top_center",
+          "top_right",
+          "bottom_left",
+          "bottom_center",
+          "bottom_right",
+          "center"
+        ]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": ["right_top", "right_center", "right_bottom"]
+      },
+      {
+        "zoneId": "field_2",
+        "type": "field",
+        "segments": ["left_bottom", "left_center", "left_top"]
+      }
+    ]
+  },
+  {
+    "tileId": "double_city_opposite",
+    "imageKey": "double_city_opposite.png",
+    "count": 3,
+    "edges": {
+      "top": "field",
+      "right": "city",
+      "bottom": "field",
+      "left": "city"
+    },
+    "zones": [
+      {
+        "zoneId": "city_1",
+        "type": "city",
+        "segments": ["right_top", "right_center", "right_bottom"]
+      },
+      {
+        "zoneId": "city_2",
+        "type": "city",
+        "segments": ["left_bottom", "left_center", "left_top"]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": [
+          "top_left",
+          "top_center",
+          "top_right",
+          "bottom_left",
+          "bottom_center",
+          "bottom_right",
+          "center"
+        ]
+      }
+    ]
+  },
+  {
+    "tileId": "double_city_curve",
+    "imageKey": "double_city_curve.png",
+    "count": 2,
+    "edges": {
+      "top": "field",
+      "right": "city",
+      "bottom": "city",
+      "left": "field"
+    },
+    "zones": [
+      {
+        "zoneId": "city_1",
+        "type": "city",
+        "segments": ["right_top", "right_center", "right_bottom"]
+      },
+      {
+        "zoneId": "city_2",
+        "type": "city",
+        "segments": ["bottom_left", "bottom_center", "bottom_right"]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": [
+          "left_bottom",
+          "left_center",
+          "left_top",
+          "top_left",
+          "top_center",
+          "top_right",
+          "center"
+        ]
+      }
+    ]
+  },
+  {
+    "tileId": "city_cap_with_road",
+    "imageKey": "city_cap_with_road.png",
+    "count": 3,
+    "edges": {
+      "top": "city",
+      "right": "road",
+      "bottom": "road",
+      "left": "field"
+    },
+    "zones": [
+      {
+        "zoneId": "city_1",
+        "type": "city",
+        "segments": ["top_left", "top_center", "top_right"]
+      },
+      {
+        "zoneId": "road_1",
+        "type": "road",
+        "segments": ["bottom_center", "center", "right_center"]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": ["left_bottom", "left_center", "left_top", "bottom_left", "right_top"]
+      },
+      {
+        "zoneId": "field_2",
+        "type": "field",
+        "segments": ["right_bottom", "bottom_right"]
+      }
+    ]
+  },
+  {
+    "tileId": "road_curve_city_side",
+    "imageKey": "road_curve_city_side.png",
+    "count": 3,
+    "edges": {
+      "top": "road",
+      "right": "city",
+      "bottom": "field",
+      "left": "road"
+    },
+    "zones": [
+      {
+        "zoneId": "city_1",
+        "type": "city",
+        "segments": ["right_top", "right_center", "right_bottom"]
+      },
+      {
+        "zoneId": "road_1",
+        "type": "road",
+        "segments": ["center", "left_center", "top_center"]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": ["top_left", "left_top"]
+      },
+      {
+        "zoneId": "field_2",
+        "type": "field",
+        "segments": ["bottom_center", "bottom_right", "bottom_left", "left_bottom", "top_right"]
+      }
+    ]
+  },
+  {
+    "tileId": "road_t_city_side",
+    "imageKey": "road_t_city_side.png",
+    "count": 3,
+    "edges": {
+      "top": "road",
+      "right": "city",
+      "bottom": "road",
+      "left": "road"
+    },
+    "zones": [
+      {
+        "zoneId": "city_1",
+        "type": "city",
+        "segments": ["right_top", "right_center", "right_bottom"]
+      },
+      {
+        "zoneId": "road_left",
+        "type": "road",
+        "segments": ["left_center"]
+      },
+      {
+        "zoneId": "road_bottom",
+        "type": "road",
+        "segments": ["bottom_center"]
+      },
+      {
+        "zoneId": "road_top",
+        "type": "road",
+        "segments": ["top_center"]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": ["left_bottom", "bottom_left"]
+      },
+      {
+        "zoneId": "field_2",
+        "type": "field",
+        "segments": ["top_left", "left_top"]
+      },
+      {
+        "zoneId": "field_3",
+        "type": "field",
+        "segments": ["top_right", "bottom_right"]
+      }
+    ]
+  },
+  {
+    "tileId": "city_curve_shield",
+    "imageKey": "city_curve_shield.png",
+    "count": 2,
+    "edges": {
+      "top": "city",
+      "right": "field",
+      "bottom": "field",
+      "left": "city"
+    },
+    "zones": [
+      {
+        "zoneId": "city_1",
+        "type": "city",
+        "hasPennant": true,
+        "segments": ["top_left", "top_center", "top_right", "left_bottom", "left_center", "left_top"]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": [
+          "bottom_center",
+          "bottom_right",
+          "bottom_left",
+          "right_top",
+          "right_center",
+          "right_bottom",
+          "center"
+        ]
+      }
+    ]
+  },
+  {
+    "tileId": "city_curve",
+    "imageKey": "city_curve.png",
+    "count": 3,
+    "edges": {
+      "top": "city",
+      "right": "field",
+      "bottom": "field",
+      "left": "city"
+    },
+    "zones": [
+      {
+        "zoneId": "city_1",
+        "type": "city",
+        "segments": ["top_left", "top_center", "top_right", "left_bottom", "left_center", "left_top"]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": [
+          "bottom_center",
+          "bottom_right",
+          "bottom_left",
+          "right_top",
+          "right_center",
+          "right_bottom",
+          "center"
+        ]
+      }
+    ]
+  },
+  {
+    "tileId": "city_curve_with_road_curve_shield",
+    "imageKey": "city_curve_with_road_curve_shield.png",
+    "count": 2,
+    "edges": {
+      "top": "city",
+      "right": "road",
+      "bottom": "road",
+      "left": "city"
+    },
+    "zones": [
+      {
+        "zoneId": "city_1",
+        "type": "city",
+        "hasPennant": true,
+        "segments": ["top_left", "top_center", "top_right", "left_bottom", "left_center", "left_top"]
+      },
+      {
+        "zoneId": "road_1",
+        "type": "road",
+        "segments": ["right_center", "bottom_center", "center"]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": ["bottom_right", "right_top"]
+      },
+      {
+        "zoneId": "field_2",
+        "type": "field",
+        "segments": ["right_bottom", "bottom_left"]
+      }
+    ]
+  },
+  {
+    "tileId": "city_curve_with_road_curve",
+    "imageKey": "city_curve_with_road_curve.png",
+    "count": 3,
+    "edges": {
+      "top": "city",
+      "right": "road",
+      "bottom": "road",
+      "left": "city"
+    },
+    "zones": [
+      {
+        "zoneId": "city_1",
+        "type": "city",
+        "segments": ["top_left", "top_center", "top_right", "left_bottom", "left_center", "left_top"]
+      },
+      {
+        "zoneId": "road_1",
+        "type": "road",
+        "segments": ["right_center", "bottom_center", "center"]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": ["bottom_right", "right_top"]
+      },
+      {
+        "zoneId": "field_2",
+        "type": "field",
+        "segments": ["right_bottom", "bottom_left"]
+      }
+    ]
+  },
+  {
+    "tileId": "city_gate_shield",
+    "imageKey": "city_gate_shield.png",
+    "count": 1,
+    "edges": {
+      "top": "city",
+      "right": "city",
+      "bottom": "field",
+      "left": "city"
+    },
+    "zones": [
+      {
+        "zoneId": "city_1",
+        "type": "city",
+        "hasPennant": true,
+        "segments": [
+          "right_top",
+          "right_center",
+          "right_bottom",
+          "top_left",
+          "top_center",
+          "top_right",
+          "left_bottom",
+          "left_center",
+          "left_top"
+        ]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": ["bottom_center", "bottom_right", "bottom_left", "center"]
+      }
+    ]
+  },
+  {
+    "tileId": "city_gate",
+    "imageKey": "city_gate.png",
+    "count": 3,
+    "edges": {
+      "top": "city",
+      "right": "city",
+      "bottom": "field",
+      "left": "city"
+    },
+    "zones": [
+      {
+        "zoneId": "city_1",
+        "type": "city",
+        "segments": [
+          "right_top",
+          "right_center",
+          "right_bottom",
+          "top_left",
+          "top_center",
+          "top_right",
+          "left_bottom",
+          "left_center",
+          "left_top"
+        ]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": ["bottom_center", "bottom_right", "bottom_left", "center"]
+      }
+    ]
+  },
+  {
+    "tileId": "city_gate_shield_with_road",
+    "imageKey": "city_gate_shield_with_road.png",
+    "count": 2,
+    "edges": {
+      "top": "city",
+      "right": "city",
+      "bottom": "road",
+      "left": "city"
+    },
+    "zones": [
+      {
+        "zoneId": "city_1",
+        "type": "city",
+        "hasPennant": true,
+        "segments": [
+          "right_top",
+          "right_center",
+          "right_bottom",
+          "top_left",
+          "top_center",
+          "top_right",
+          "left_bottom",
+          "left_center",
+          "left_top"
+        ]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": ["bottom_left"]
+      },
+      {
+        "zoneId": "field_2",
+        "type": "field",
+        "segments": ["bottom_right"]
+      },
+      {
+        "zoneId": "road_1",
+        "type": "road",
+        "segments": ["center", "bottom_center"]
+      }
+    ]
+  },
+  {
+    "tileId": "city_gate_with_road",
+    "imageKey": "city_gate_with_road.png",
+    "count": 1,
+    "edges": {
+      "top": "city",
+      "right": "city",
+      "bottom": "road",
+      "left": "city"
+    },
+    "zones": [
+      {
+        "zoneId": "city_1",
+        "type": "city",
+        "segments": [
+          "right_top",
+          "right_center",
+          "right_bottom",
+          "top_left",
+          "top_center",
+          "top_right",
+          "left_bottom",
+          "left_center",
+          "left_top"
+        ]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": ["bottom_left"]
+      },
+      {
+        "zoneId": "field_2",
+        "type": "field",
+        "segments": ["bottom_right"]
+      },
+      {
+        "zoneId": "road_1",
+        "type": "road",
+        "segments": ["center", "bottom_center"]
+      }
+    ]
+  },
+  {
+    "tileId": "road_straight",
+    "imageKey": "road_straight.png",
+    "count": 8,
+    "edges": {
+      "top": "road",
+      "right": "field",
+      "bottom": "road",
+      "left": "field"
+    },
+    "zones": [
+      {
+        "zoneId": "road_1",
+        "type": "road",
+        "segments": ["center", "top_center", "bottom_center"]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": ["left_bottom", "left_center", "left_top", "top_left", "bottom_left"]
+      },
+      {
+        "zoneId": "field_2",
+        "type": "field",
+        "segments": ["right_top", "right_center", "right_bottom", "top_right", "bottom_right"]
+      }
+    ]
+  },
+  {
+    "tileId": "road_curve",
+    "imageKey": "road_curve.png",
+    "count": 9,
+    "edges": {
+      "top": "field",
+      "right": "field",
+      "bottom": "road",
+      "left": "road"
+    },
+    "zones": [
+      {
+        "zoneId": "road_1",
+        "type": "road",
+        "segments": ["center", "bottom_center", "left_center"]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": [
+          "right_top",
+          "right_center",
+          "right_bottom",
+          "top_left",
+          "top_center",
+          "top_right",
+          "left_top",
+          "bottom_right"
+        ]
+      },
+      {
+        "zoneId": "field_2",
+        "type": "field",
+        "segments": ["bottom_left", "left_bottom"]
+      }
+    ]
+  },
+  {
+    "tileId": "road_t",
+    "imageKey": "road_t.png",
+    "count": 4,
+    "edges": {
+      "top": "field",
+      "right": "road",
+      "bottom": "road",
+      "left": "road"
+    },
+    "zones": [
+      {
+        "zoneId": "road_right",
+        "type": "road",
+        "segments": ["right_center"]
+      },
+      {
+        "zoneId": "road_bottom",
+        "type": "road",
+        "segments": ["bottom_center"]
+      },
+      {
+        "zoneId": "road_left",
+        "type": "road",
+        "segments": ["left_center"]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": ["top_left", "top_center", "top_right", "left_top", "right_top"]
+      },
+      {
+        "zoneId": "field_2",
+        "type": "field",
+        "segments": ["bottom_left", "left_bottom"]
+      },
+      {
+        "zoneId": "field_3",
+        "type": "field",
+        "segments": ["right_bottom", "bottom_right"]
+      }
+    ]
+  },
+  {
+    "tileId": "road_cross",
+    "imageKey": "road_cross.png",
+    "count": 1,
+    "edges": {
+      "top": "road",
+      "right": "road",
+      "bottom": "road",
+      "left": "road"
+    },
+    "zones": [
+      {
+        "zoneId": "road_bottom",
+        "type": "road",
+        "segments": ["bottom_center"]
+      },
+      {
+        "zoneId": "road_right",
+        "type": "road",
+        "segments": ["right_center"]
+      },
+      {
+        "zoneId": "road_left",
+        "type": "road",
+        "segments": ["left_center"]
+      },
+      {
+        "zoneId": "road_top",
+        "type": "road",
+        "segments": ["top_center"]
+      },
+      {
+        "zoneId": "field_1",
+        "type": "field",
+        "segments": ["top_left", "left_top"]
+      },
+      {
+        "zoneId": "field_2",
+        "type": "field",
+        "segments": ["top_right", "right_top"]
+      },
+      {
+        "zoneId": "field_3",
+        "type": "field",
+        "segments": ["bottom_left", "left_bottom"]
+      },
+      {
+        "zoneId": "field_4",
+        "type": "field",
+        "segments": ["right_bottom", "bottom_right"]
+      }
+    ]
+  }
+]

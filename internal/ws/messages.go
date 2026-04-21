@@ -16,6 +16,10 @@ type JoinRoomPayload struct {
 	RoomID string `json:"roomId"`
 }
 
+type LeaveRoomPayload struct {
+	RoomID string `json:"roomId"`
+}
+
 type UpdateRoomSettingsPayload struct {
 	Name       string          `json:"name"`
 	RoomID     string          `json:"roomId"`

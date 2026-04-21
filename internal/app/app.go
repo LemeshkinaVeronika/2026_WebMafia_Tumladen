@@ -61,7 +61,14 @@ func New(ctx context.Context) (*App, error) {
 	jwtProvider := jwtprovider.New(cfg.JWTSecret, cfg.JWTTTL)
 	authMiddleware := middleware.NewAuth(jwtProvider)
 
-	gamesRegistry, err := gameService.NewRegistry(carcassonneService.NewEngine())
+	carcassonneEngine, err := carcassonneService.NewEngine()
+	if err != nil {
+		stop()
+		_ = db.Close()
+		return nil, err
+	}
+
+	gamesRegistry, err := gameService.NewRegistry(carcassonneEngine)
 	if err != nil {
 		stop()
 		_ = db.Close()

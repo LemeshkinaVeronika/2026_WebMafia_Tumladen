@@ -256,6 +256,8 @@ func (h *MessageHandler) HandleMessage(client *centrifuge.Client, message []byte
 		switch msg.Type {
 		case "join_room":
 			h.handleJoinRoom(ctx, state, msg.Payload)
+		case "leave_room":
+			h.handleLeaveRoom(ctx, state, msg.Payload)
 		case "update_room_settings":
 			h.handleUpdateRoomSettings(ctx, state, msg.Payload)
 		case "start_room":
@@ -484,6 +486,101 @@ func (h *MessageHandler) handleJoinRoom(ctx context.Context, state *ConnectionSt
 
 	h.broadcastRoomState(ctx, p.RoomID, roomState)
 	h.sendActiveMatchStateIfExists(ctx, state, p.RoomID)
+}
+
+func (h *MessageHandler) handleLeaveRoom(ctx context.Context, state *ConnectionState, payload any) {
+	if state == nil || state.Client == nil {
+		return
+	}
+
+	client := state.Client
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		h.sendServerMessage(client, ServerMessage{
+			Type: "error",
+			Payload: ErrorPayload{
+				Message: "invalid payload",
+			},
+		})
+		return
+	}
+
+	var p LeaveRoomPayload
+	if err := json.Unmarshal(raw, &p); err != nil || p.RoomID == "" {
+		h.sendServerMessage(client, ServerMessage{
+			Type: "error",
+			Payload: ErrorPayload{
+				Message: "invalid leave room payload",
+			},
+		})
+		return
+	}
+
+	if state.RoomID != p.RoomID {
+		h.sendServerMessage(client, ServerMessage{
+			Type: "error",
+			Payload: ErrorPayload{
+				Message: "not in room",
+			},
+		})
+		return
+	}
+
+	roomState, err := h.roomService.GetRoomState(ctx, p.RoomID)
+	if err != nil {
+		message := "failed to load room"
+		if errors.Is(err, roomService.ErrRoomNotFound) {
+			message = "room not found"
+		}
+
+		h.sendServerMessage(client, ServerMessage{
+			Type: "error",
+			Payload: ErrorPayload{
+				Message: message,
+			},
+		})
+		return
+	}
+
+	if roomState.Status == string(model.RoomStatusPlaying) {
+		h.sendServerMessage(client, ServerMessage{
+			Type: "error",
+			Payload: ErrorPayload{
+				Message: "cannot leave room during active match",
+			},
+		})
+		return
+	}
+
+	if err := h.roomService.LeaveRoom(ctx, roomDTO.LeaveRoomRequest{
+		ActorID: state.Actor.ID,
+		RoomID:  p.RoomID,
+	}); err != nil {
+		h.sendServerMessage(client, ServerMessage{
+			Type: "error",
+			Payload: ErrorPayload{
+				Message: "failed to leave room",
+			},
+		})
+		return
+	}
+
+	h.sendServerMessage(client, ServerMessage{
+		Type: "room_left",
+		Payload: map[string]string{
+			"roomId": p.RoomID,
+		},
+	})
+
+	h.unsubscribeFromRoom(client, p.RoomID, state.Actor.ID)
+	h.registry.SetRoom(state, "")
+
+	if roomState, err = h.roomService.GetRoomState(ctx, p.RoomID); err != nil {
+		h.loggerFromContext(ctx).With("roomID", p.RoomID, "error", err).Warnf("failed to load room after leave")
+		return
+	}
+
+	h.broadcastRoomState(ctx, p.RoomID, roomState)
 }
 
 func (h *MessageHandler) handleUpdateRoomSettings(ctx context.Context, state *ConnectionState, payload any) {
