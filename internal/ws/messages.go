@@ -38,8 +38,22 @@ type ServerMessage struct {
 }
 
 type ErrorPayload struct {
+	Code    string `json:"code"`
 	Message string `json:"message"`
 }
+
+const (
+	ErrorInvalidPayload     = "INVALID_PAYLOAD"
+	ErrorRoomNotFound       = "ROOM_NOT_FOUND"
+	ErrorRoomFull           = "ROOM_FULL"
+	ErrorRoomNotJoinable    = "ROOM_NOT_JOINABLE"
+	ErrorForbidden          = "FORBIDDEN"
+	ErrorNotYourTurn        = "NOT_YOUR_TURN"
+	ErrorInvalidMatchAction = "INVALID_MATCH_ACTION"
+	ErrorMatchNotFound      = "MATCH_NOT_FOUND"
+	ErrorMatchNotActive     = "MATCH_NOT_ACTIVE"
+	ErrorInternal           = "INTERNAL_ERROR"
+)
 
 type ParticipantKickedPayload struct {
 	Reason string `json:"reason"`

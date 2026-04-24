@@ -66,6 +66,9 @@ func (s *Service) GetActiveByRoomID(ctx context.Context, roomID string) (*dto.Ma
 }
 
 func (s *Service) ApplyAction(ctx context.Context, req dto.ApplyMatchActionRequest) (*dto.MatchResponse, error) {
+	unlock := s.roomLocks.Lock(req.RoomID)
+	defer unlock()
+
 	match, players, err := s.repo.GetActiveByRoomID(ctx, req.RoomID)
 	if err != nil {
 		if errors.Is(err, matchPostgres.ErrNotFound) {

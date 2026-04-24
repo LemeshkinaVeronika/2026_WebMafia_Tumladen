@@ -110,6 +110,23 @@ func (r *Registry) LocalClientsForActor(roomID, actorID string) []*centrifuge.Cl
 	return clients
 }
 
+func (r *Registry) LocalStatesForRoom(roomID string) []*ConnectionState {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	clientIDs := r.rooms[roomID]
+	states := make([]*ConnectionState, 0, len(clientIDs))
+	for clientID := range clientIDs {
+		state, ok := r.connections[clientID]
+		if !ok || state.Client == nil {
+			continue
+		}
+		states = append(states, state)
+	}
+
+	return states
+}
+
 func (r *Registry) HasLocalClientForActor(roomID, actorID string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

@@ -144,7 +144,7 @@ func TestDrawNextPlaceableTileReturnsSkippedTilesToDeck(t *testing.T) {
 		{InstanceID: "tail", TileID: "monastery"},
 	}
 	board := []carcassonneDTO.PlacedTile{
-		{InstanceID: "start", TileID: "start_tile", X: 0, Y: 0, Rotation: 0},
+		{InstanceID: "city", TileID: "city_full_shield", X: 0, Y: 0, Rotation: 0},
 	}
 
 	tile, remaining := engine.drawNextPlaceableTile(deck, board)
@@ -155,8 +155,8 @@ func TestDrawNextPlaceableTileReturnsSkippedTilesToDeck(t *testing.T) {
 	if got, want := len(remaining), 2; got != want {
 		t.Fatalf("remaining deck length = %d, want %d", got, want)
 	}
-	if remaining[0].InstanceID != "blocked" || remaining[1].InstanceID != "tail" {
-		t.Fatalf("remaining deck order = %#v, want skipped blocked then tail", remaining)
+	if remaining[0].InstanceID != "tail" || remaining[1].InstanceID != "blocked" {
+		t.Fatalf("remaining deck order = %#v, want tail then skipped blocked", remaining)
 	}
 }
 
@@ -168,7 +168,7 @@ func TestDrawNextPlaceableTileKeepsDeckWhenNoTileIsPlaceable(t *testing.T) {
 		{InstanceID: "blocked-2", TileID: "road_t"},
 	}
 	board := []carcassonneDTO.PlacedTile{
-		{InstanceID: "start", TileID: "monastery", X: 0, Y: 0, Rotation: 0},
+		{InstanceID: "city", TileID: "city_full_shield", X: 0, Y: 0, Rotation: 0},
 	}
 
 	tile, remaining := engine.drawNextPlaceableTile(deck, board)

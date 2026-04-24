@@ -47,6 +47,16 @@ type TileDefinition struct {
 	Zones    []ZoneDefinition `json:"zones"`
 }
 
+type TileCatalogItem struct {
+	TileID     string           `json:"tileId"`
+	ImageKey   string           `json:"imageKey"`
+	Edges      TileEdges        `json:"edges"`
+	Zones      []ZoneDefinition `json:"zones"`
+	Segments   []ZoneSegment    `json:"segments"`
+	HasPennant bool             `json:"hasPennant"`
+	Count      int              `json:"count"`
+}
+
 type TileEdges struct {
 	Top    EdgeType `json:"top"`
 	Right  EdgeType `json:"right"`

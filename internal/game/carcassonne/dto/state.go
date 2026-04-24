@@ -67,7 +67,7 @@ type TileView struct {
 
 type PrivateGameState struct {
 	IsYourTurn            bool                   `json:"isYourTurn"`
-	Phase                 string                 `json:"phase"`
+	Phase                 Phase                  `json:"phase"`
 	CurrentPlayerID       string                 `json:"currentPlayerId"`
 	AllowedTilePlacements []AllowedTilePlacement `json:"allowedTilePlacements,omitempty"`
 	AllowedMeepleZones    []string               `json:"allowedMeepleZones,omitempty"`

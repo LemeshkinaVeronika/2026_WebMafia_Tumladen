@@ -157,13 +157,13 @@ func (e *Engine) drawNextPlaceableTile(
 			break
 		}
 		if e.hasAnyTilePlacement(*tile, board) {
-			deck = append(skipped, deck...)
+			deck = append(deck, skipped...)
 			return tile, deck
 		}
 		skipped = append(skipped, *tile)
 	}
 
-	deck = append(skipped, deck...)
+	deck = append(deck, skipped...)
 	return nil, deck
 }
 

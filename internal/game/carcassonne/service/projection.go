@@ -58,7 +58,7 @@ func (e *Engine) BuildPrivateState(match *model.Match, _ []model.MatchPlayer, ac
 
 	privateState := carcassonneDTO.PrivateGameState{
 		IsYourTurn:      state.CurrentPlayerID == actorID,
-		Phase:           string(state.Phase),
+		Phase:           state.Phase,
 		CurrentPlayerID: state.CurrentPlayerID,
 	}
 

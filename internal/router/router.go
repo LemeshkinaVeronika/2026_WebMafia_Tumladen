@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	carcassonneDelivery "github.com/webmafia/tumladan/internal/game/carcassonne/delivery/http"
 	guestDelivery "github.com/webmafia/tumladan/internal/guest/delivery/http"
 	"github.com/webmafia/tumladan/internal/middleware"
 	roomDelivery "github.com/webmafia/tumladan/internal/room/delivery/http"
@@ -13,11 +14,12 @@ import (
 )
 
 type AppHandlers struct {
-	GuestHandler    *guestDelivery.Handler
-	RoomHandler     *roomDelivery.Handler
-	WSHandler       *internalws.Handler
-	cors            middleware.CORSConfig
-	WSTicketHandler *wsticketDelivery.Handler
+	GuestHandler       *guestDelivery.Handler
+	CarcassonneHandler *carcassonneDelivery.Handler
+	RoomHandler        *roomDelivery.Handler
+	WSHandler          *internalws.Handler
+	cors               middleware.CORSConfig
+	WSTicketHandler    *wsticketDelivery.Handler
 }
 
 func NewRouter(handlers AppHandlers, healthHandler http.HandlerFunc, auth *middleware.Auth, log logger.Logger, cors middleware.CORSConfig) *chi.Mux {
@@ -41,6 +43,10 @@ func NewRouter(handlers AppHandlers, healthHandler http.HandlerFunc, auth *middl
 
 		if handlers.RoomHandler != nil {
 			handlers.RoomHandler.RegisterPublicRoutes(api)
+		}
+
+		if handlers.CarcassonneHandler != nil {
+			handlers.CarcassonneHandler.RegisterPublicRoutes(api)
 		}
 
 		if auth != nil && handlers.RoomHandler != nil {

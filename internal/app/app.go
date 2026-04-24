@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	carcassonneHTTP "github.com/webmafia/tumladan/internal/game/carcassonne/delivery/http"
 	carcassonneService "github.com/webmafia/tumladan/internal/game/carcassonne/service"
 	gameService "github.com/webmafia/tumladan/internal/game/service"
 	guestHTTP "github.com/webmafia/tumladan/internal/guest/delivery/http"
@@ -27,6 +28,7 @@ import (
 	wsticketStore "github.com/webmafia/tumladan/internal/ws_ticket/store"
 	jwtprovider "github.com/webmafia/tumladan/pkg/jwt"
 	"github.com/webmafia/tumladan/pkg/logger"
+	miniostore "github.com/webmafia/tumladan/pkg/minio"
 	"github.com/webmafia/tumladan/pkg/postgres"
 )
 
@@ -58,6 +60,13 @@ func New(ctx context.Context) (*App, error) {
 		return nil, err
 	}
 
+	_, err = miniostore.New(ctx, cfg.MinIO)
+	if err != nil {
+		stop()
+		_ = db.Close()
+		return nil, err
+	}
+
 	jwtProvider := jwtprovider.New(cfg.JWTSecret, cfg.JWTTTL)
 	authMiddleware := middleware.NewAuth(jwtProvider)
 
@@ -67,6 +76,7 @@ func New(ctx context.Context) (*App, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	carcassonneHandler := carcassonneHTTP.NewHandler(carcassonneEngine)
 
 	gamesRegistry, err := gameService.NewRegistry(carcassonneEngine)
 	if err != nil {
@@ -105,10 +115,11 @@ func New(ctx context.Context) (*App, error) {
 
 	r := router.NewRouter(
 		router.AppHandlers{
-			GuestHandler:    guestHandler,
-			RoomHandler:     roomHandler,
-			WSHandler:       wsHandler,
-			WSTicketHandler: wsTicketHandler,
+			GuestHandler:       guestHandler,
+			CarcassonneHandler: carcassonneHandler,
+			RoomHandler:        roomHandler,
+			WSHandler:          wsHandler,
+			WSTicketHandler:    wsTicketHandler,
 		},
 		healthHandler(logger, db),
 		authMiddleware,

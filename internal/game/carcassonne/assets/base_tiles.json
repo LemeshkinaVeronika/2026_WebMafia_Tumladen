@@ -4,31 +4,31 @@
     "imageKey": "start_tile.png",
     "count": 0,
     "edges": {
-      "top": "road",
-      "right": "city",
-      "bottom": "road",
-      "left": "field"
+      "top": "city",
+      "right": "road",
+      "bottom": "field",
+      "left": "road"
     },
     "zones": [
       {
         "zoneId": "city_1",
         "type": "city",
-        "segments": ["right_top", "right_center", "right_bottom"]
+        "segments": ["top_left", "top_center", "top_right"]
       },
       {
         "zoneId": "road_1",
         "type": "road",
-        "segments": ["top_center", "center", "bottom_center"]
+        "segments": ["left_center", "center", "right_center"]
       },
       {
         "zoneId": "field_1",
         "type": "field",
-        "segments": ["top_left", "left_top", "left_center", "left_bottom", "bottom_left"]
+        "segments": ["left_bottom", "bottom_left", "bottom_center", "bottom_right", "right_bottom"]
       },
       {
         "zoneId": "field_2",
         "type": "field",
-        "segments": ["top_right", "bottom_right"]
+        "segments": ["left_top", "right_top"]
       }
     ]
   },

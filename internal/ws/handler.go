@@ -242,12 +242,7 @@ func (h *MessageHandler) HandleMessage(client *centrifuge.Client, message []byte
 	locked := h.registry.WithClientLock(client.ID(), func(state *ConnectionState) {
 		var msg ClientMessage
 		if err := json.Unmarshal(message, &msg); err != nil {
-			h.sendServerMessage(client, ServerMessage{
-				Type: "error",
-				Payload: ErrorPayload{
-					Message: "invalid message format",
-				},
-			})
+			h.sendError(client, ErrorInvalidPayload, "invalid message format")
 			return
 		}
 
@@ -271,12 +266,7 @@ func (h *MessageHandler) HandleMessage(client *centrifuge.Client, message []byte
 		case "kick_participant":
 			h.handleKickParticipant(ctx, state, msg.Payload)
 		default:
-			h.sendServerMessage(client, ServerMessage{
-				Type: "error",
-				Payload: ErrorPayload{
-					Message: "unsupported message type",
-				},
-			})
+			h.sendError(client, ErrorInvalidPayload, "unsupported message type")
 		}
 	})
 
@@ -310,23 +300,13 @@ func (h *MessageHandler) handleJoinRoom(ctx context.Context, state *ConnectionSt
 	client := state.Client
 	raw, err := json.Marshal(payload)
 	if err != nil {
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: "invalid payload",
-			},
-		})
+		h.sendError(client, ErrorInvalidPayload, "invalid payload")
 		return
 	}
 
 	var p JoinRoomPayload
 	if err := json.Unmarshal(raw, &p); err != nil || p.RoomID == "" {
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: "invalid roomId",
-			},
-		})
+		h.sendError(client, ErrorInvalidPayload, "invalid roomId")
 		return
 	}
 
@@ -343,12 +323,7 @@ func (h *MessageHandler) handleJoinRoom(ctx context.Context, state *ConnectionSt
 
 		roomState, err := h.roomService.GetRoomState(ctx, p.RoomID)
 		if err != nil {
-			h.sendServerMessage(client, ServerMessage{
-				Type: "error",
-				Payload: ErrorPayload{
-					Message: "failed to load room",
-				},
-			})
+			h.sendError(client, ErrorInternal, "failed to load room")
 			return
 		}
 
@@ -360,22 +335,12 @@ func (h *MessageHandler) handleJoinRoom(ctx context.Context, state *ConnectionSt
 	if previousRoomID != "" && previousRoomID != p.RoomID {
 		previousRoomState, err := h.roomService.GetRoomState(ctx, previousRoomID)
 		if err != nil {
-			h.sendServerMessage(client, ServerMessage{
-				Type: "error",
-				Payload: ErrorPayload{
-					Message: "failed to load previous room",
-				},
-			})
+			h.sendError(client, ErrorInternal, "failed to load previous room")
 			return
 		}
 
 		if previousRoomState.Status == string(model.RoomStatusPlaying) {
-			h.sendServerMessage(client, ServerMessage{
-				Type: "error",
-				Payload: ErrorPayload{
-					Message: "cannot switch rooms during active match",
-				},
-			})
+			h.sendError(client, ErrorForbidden, "cannot switch rooms during active match")
 			return
 		}
 
@@ -383,12 +348,7 @@ func (h *MessageHandler) handleJoinRoom(ctx context.Context, state *ConnectionSt
 			ActorID: actor.ID,
 			RoomID:  previousRoomID,
 		}); err != nil {
-			h.sendServerMessage(client, ServerMessage{
-				Type: "error",
-				Payload: ErrorPayload{
-					Message: "failed to leave previous room",
-				},
-			})
+			h.sendError(client, ErrorInternal, "failed to leave previous room")
 			return
 		}
 
@@ -428,22 +388,21 @@ func (h *MessageHandler) handleJoinRoom(ctx context.Context, state *ConnectionSt
 			}
 		}
 
+		code := ErrorInternal
 		message := "failed to join room"
 		switch {
 		case errors.Is(err, roomService.ErrRoomFull):
+			code = ErrorRoomFull
 			message = "room is full"
 		case errors.Is(err, roomService.ErrRoomNotFound):
+			code = ErrorRoomNotFound
 			message = "room not found"
 		case errors.Is(err, roomService.ErrRoomNotJoinable):
+			code = ErrorRoomNotJoinable
 			message = "room is not joinable"
 		}
 
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: message,
-			},
-		})
+		h.sendError(client, code, message)
 		return
 	}
 
@@ -468,12 +427,7 @@ func (h *MessageHandler) handleJoinRoom(ctx context.Context, state *ConnectionSt
 			}
 		}
 
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: "failed to subscribe to room stream",
-			},
-		})
+		h.sendError(client, ErrorInternal, "failed to subscribe to room stream")
 		return
 	}
 
@@ -496,59 +450,36 @@ func (h *MessageHandler) handleLeaveRoom(ctx context.Context, state *ConnectionS
 	client := state.Client
 	raw, err := json.Marshal(payload)
 	if err != nil {
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: "invalid payload",
-			},
-		})
+		h.sendError(client, ErrorInvalidPayload, "invalid payload")
 		return
 	}
 
 	var p LeaveRoomPayload
 	if err := json.Unmarshal(raw, &p); err != nil || p.RoomID == "" {
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: "invalid leave room payload",
-			},
-		})
+		h.sendError(client, ErrorInvalidPayload, "invalid leave room payload")
 		return
 	}
 
 	if state.RoomID != p.RoomID {
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: "not in room",
-			},
-		})
+		h.sendError(client, ErrorForbidden, "not in room")
 		return
 	}
 
 	roomState, err := h.roomService.GetRoomState(ctx, p.RoomID)
 	if err != nil {
+		code := ErrorInternal
 		message := "failed to load room"
 		if errors.Is(err, roomService.ErrRoomNotFound) {
+			code = ErrorRoomNotFound
 			message = "room not found"
 		}
 
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: message,
-			},
-		})
+		h.sendError(client, code, message)
 		return
 	}
 
 	if roomState.Status == string(model.RoomStatusPlaying) {
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: "cannot leave room during active match",
-			},
-		})
+		h.sendError(client, ErrorForbidden, "cannot leave room during active match")
 		return
 	}
 
@@ -556,12 +487,7 @@ func (h *MessageHandler) handleLeaveRoom(ctx context.Context, state *ConnectionS
 		ActorID: state.Actor.ID,
 		RoomID:  p.RoomID,
 	}); err != nil {
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: "failed to leave room",
-			},
-		})
+		h.sendError(client, ErrorInternal, "failed to leave room")
 		return
 	}
 
@@ -591,23 +517,13 @@ func (h *MessageHandler) handleUpdateRoomSettings(ctx context.Context, state *Co
 	client := state.Client
 	raw, err := json.Marshal(payload)
 	if err != nil {
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: "invalid payload",
-			},
-		})
+		h.sendError(client, ErrorInvalidPayload, "invalid payload")
 		return
 	}
 
 	var p UpdateRoomSettingsPayload
 	if err := json.Unmarshal(raw, &p); err != nil || p.RoomID == "" {
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: "invalid room settings payload",
-			},
-		})
+		h.sendError(client, ErrorInvalidPayload, "invalid room settings payload")
 		return
 	}
 
@@ -623,11 +539,14 @@ func (h *MessageHandler) handleUpdateRoomSettings(ctx context.Context, state *Co
 		},
 	)
 	if err != nil {
+		code := ErrorInternal
 		message := "failed to update room settings"
 		switch {
 		case errors.Is(err, roomService.ErrForbidden):
+			code = ErrorForbidden
 			message = "forbidden"
 		case errors.Is(err, roomService.ErrRoomNotFound):
+			code = ErrorRoomNotFound
 			message = "room not found"
 		case errors.Is(err, roomService.ErrInvalidRoomName),
 			errors.Is(err, roomService.ErrInvalidGameType),
@@ -635,15 +554,11 @@ func (h *MessageHandler) handleUpdateRoomSettings(ctx context.Context, state *Co
 			errors.Is(err, roomService.ErrInvalidRoomSettings),
 			errors.Is(err, roomService.ErrMaxPlayersLessThanParticipants),
 			errors.Is(err, roomService.ErrRoomSettingsLocked):
+			code = ErrorInvalidPayload
 			message = err.Error()
 		}
 
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: message,
-			},
-		})
+		h.sendError(client, code, message)
 		return
 	}
 
@@ -658,23 +573,13 @@ func (h *MessageHandler) handleStartRoom(ctx context.Context, state *ConnectionS
 	client := state.Client
 	raw, err := json.Marshal(payload)
 	if err != nil {
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: "invalid payload",
-			},
-		})
+		h.sendError(client, ErrorInvalidPayload, "invalid payload")
 		return
 	}
 
 	var p StartRoomPayload
 	if err := json.Unmarshal(raw, &p); err != nil || p.RoomID == "" {
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: "invalid start room payload",
-			},
-		})
+		h.sendError(client, ErrorInvalidPayload, "invalid start room payload")
 		return
 	}
 
@@ -683,22 +588,21 @@ func (h *MessageHandler) handleStartRoom(ctx context.Context, state *ConnectionS
 		RoomID:  p.RoomID,
 	})
 	if err != nil {
+		code := ErrorInternal
 		message := "failed to start room"
 		switch {
 		case errors.Is(err, roomService.ErrForbidden):
+			code = ErrorForbidden
 			message = "forbidden"
 		case errors.Is(err, roomService.ErrRoomNotFound):
+			code = ErrorRoomNotFound
 			message = "room not found"
 		case errors.Is(err, roomService.ErrNotEnoughPlayers), errors.Is(err, roomService.ErrRoomNotReady):
+			code = ErrorInvalidPayload
 			message = err.Error()
 		}
 
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: message,
-			},
-		})
+		h.sendError(client, code, message)
 		return
 	}
 
@@ -706,12 +610,7 @@ func (h *MessageHandler) handleStartRoom(ctx context.Context, state *ConnectionS
 
 	matchState, err := h.matchService.GetActiveByRoomID(ctx, p.RoomID)
 	if err != nil {
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: "failed to load started match",
-			},
-		})
+		h.sendError(client, ErrorInternal, "failed to load started match")
 		return
 	}
 
@@ -753,8 +652,9 @@ func (h *MessageHandler) sendMatchState(state *ConnectionState, matchState *matc
 }
 
 func (h *MessageHandler) broadcastMatchState(ctx context.Context, roomID string, matchState *matchDTO.MatchResponse) {
-	h.broadcastMatchEvent(ctx, roomID, "match_state", h.publicMatchStatePayload(ctx, matchState))
-	h.broadcastPrivateMatchState(ctx, roomID, matchState)
+	for _, state := range h.registry.LocalStatesForRoom(roomID) {
+		h.sendMatchState(state, matchState)
+	}
 }
 
 func (h *MessageHandler) sendActiveMatchStateIfExists(ctx context.Context, state *ConnectionState, roomID string) {
@@ -768,12 +668,7 @@ func (h *MessageHandler) sendActiveMatchStateIfExists(ctx context.Context, state
 			return
 		}
 
-		h.sendServerMessage(state.Client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: "failed to load active match",
-			},
-		})
+		h.sendError(state.Client, ErrorInternal, "failed to load active match")
 		return
 	}
 
@@ -830,23 +725,13 @@ func (h *MessageHandler) handleMatchAction(ctx context.Context, state *Connectio
 	client := state.Client
 	raw, err := json.Marshal(payload)
 	if err != nil {
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: "invalid payload",
-			},
-		})
+		h.sendError(client, ErrorInvalidPayload, "invalid payload")
 		return
 	}
 
 	var p MatchActionPayload
 	if err := json.Unmarshal(raw, &p); err != nil || p.RoomID == "" || p.Action == "" {
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: "invalid match action payload",
-			},
-		})
+		h.sendError(client, ErrorInvalidPayload, "invalid match action payload")
 		return
 	}
 
@@ -857,24 +742,24 @@ func (h *MessageHandler) handleMatchAction(ctx context.Context, state *Connectio
 		Payload: marshalRawMessage(p.Payload),
 	})
 	if err != nil {
+		code := ErrorInternal
 		message := "failed to apply match action"
 		switch {
 		case errors.Is(err, matchService.ErrMatchNotFound):
+			code = ErrorMatchNotFound
 			message = "match not found"
 		case errors.Is(err, matchService.ErrMatchNotActive):
+			code = ErrorMatchNotActive
 			message = "match is not active"
 		case errors.Is(err, matchService.ErrInvalidMatchAction):
+			code = ErrorInvalidMatchAction
 			message = "invalid match action"
 		case errors.Is(err, matchService.ErrNotYourTurn):
+			code = ErrorNotYourTurn
 			message = "not your turn"
 		}
 
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: message,
-			},
-		})
+		h.sendError(client, code, message)
 		return
 	}
 
@@ -902,37 +787,32 @@ func (h *MessageHandler) handleLeaveMatch(ctx context.Context, state *Connection
 	client := state.Client
 	raw, err := json.Marshal(payload)
 	if err != nil {
-		h.sendServerMessage(client, ServerMessage{
-			Type:    "error",
-			Payload: ErrorPayload{Message: "invalid payload"},
-		})
+		h.sendError(client, ErrorInvalidPayload, "invalid payload")
 		return
 	}
 
 	var p LeaveMatchPayload
 	if err := json.Unmarshal(raw, &p); err != nil || p.RoomID == "" {
-		h.sendServerMessage(client, ServerMessage{
-			Type:    "error",
-			Payload: ErrorPayload{Message: "invalid leave match payload"},
-		})
+		h.sendError(client, ErrorInvalidPayload, "invalid leave match payload")
 		return
 	}
 
 	if err := h.roomService.LeaveActiveMatch(ctx, p.RoomID, state.Actor.ID); err != nil {
+		code := ErrorInternal
 		message := "failed to leave match"
 		switch {
 		case errors.Is(err, roomService.ErrForbidden):
+			code = ErrorForbidden
 			message = "forbidden"
 		case errors.Is(err, roomService.ErrRoomNotFound):
+			code = ErrorRoomNotFound
 			message = "room not found"
 		case errors.Is(err, roomService.ErrActiveMatchNotFound):
+			code = ErrorMatchNotFound
 			message = "active match not found"
 		}
 
-		h.sendServerMessage(client, ServerMessage{
-			Type:    "error",
-			Payload: ErrorPayload{Message: message},
-		})
+		h.sendError(client, code, message)
 		return
 	}
 
@@ -948,36 +828,24 @@ func (h *MessageHandler) handleDeleteRoom(ctx context.Context, state *Connection
 	client := state.Client
 	raw, err := json.Marshal(payload)
 	if err != nil {
-		h.sendServerMessage(client, ServerMessage{
-			Type:    "error",
-			Payload: ErrorPayload{Message: "invalid payload"},
-		})
+		h.sendError(client, ErrorInvalidPayload, "invalid payload")
 		return
 	}
 
 	var p DeleteRoomPayload
 	if err := json.Unmarshal(raw, &p); err != nil || p.RoomID == "" {
-		h.sendServerMessage(client, ServerMessage{
-			Type:    "error",
-			Payload: ErrorPayload{Message: "invalid delete room payload"},
-		})
+		h.sendError(client, ErrorInvalidPayload, "invalid delete room payload")
 		return
 	}
 
 	roomState, err := h.roomService.GetRoomState(ctx, p.RoomID)
 	if err != nil {
-		h.sendServerMessage(client, ServerMessage{
-			Type:    "error",
-			Payload: ErrorPayload{Message: "room not found"},
-		})
+		h.sendError(client, ErrorRoomNotFound, "room not found")
 		return
 	}
 
 	if roomState.OwnerActorID != state.Actor.ID {
-		h.sendServerMessage(client, ServerMessage{
-			Type:    "error",
-			Payload: ErrorPayload{Message: "forbidden"},
-		})
+		h.sendError(client, ErrorForbidden, "forbidden")
 		return
 	}
 
@@ -991,18 +859,18 @@ func (h *MessageHandler) handleDeleteRoom(ctx context.Context, state *Connection
 		ActorID: state.Actor.ID,
 		RoomID:  p.RoomID,
 	}); err != nil {
+		code := ErrorInternal
 		message := "failed to delete room"
 		switch {
 		case errors.Is(err, roomService.ErrForbidden):
+			code = ErrorForbidden
 			message = "forbidden"
 		case errors.Is(err, roomService.ErrRoomNotFound):
+			code = ErrorRoomNotFound
 			message = "room not found"
 		}
 
-		h.sendServerMessage(client, ServerMessage{
-			Type:    "error",
-			Payload: ErrorPayload{Message: message},
-		})
+		h.sendError(client, code, message)
 		return
 	}
 
@@ -1028,23 +896,13 @@ func (h *MessageHandler) handleKickParticipant(ctx context.Context, state *Conne
 	client := state.Client
 	raw, err := json.Marshal(payload)
 	if err != nil {
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: "invalid payload",
-			},
-		})
+		h.sendError(client, ErrorInvalidPayload, "invalid payload")
 		return
 	}
 
 	var p KickParticipantPayload
 	if err := json.Unmarshal(raw, &p); err != nil || p.RoomID == "" || p.TargetActorID == "" {
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: "invalid kick participant payload",
-			},
-		})
+		h.sendError(client, ErrorInvalidPayload, "invalid kick participant payload")
 		return
 	}
 
@@ -1054,26 +912,27 @@ func (h *MessageHandler) handleKickParticipant(ctx context.Context, state *Conne
 		TargetActorID: p.TargetActorID,
 	})
 	if err != nil {
+		code := ErrorInternal
 		message := "failed to kick participant"
 		switch {
 		case errors.Is(err, roomService.ErrForbidden):
+			code = ErrorForbidden
 			message = "forbidden"
 		case errors.Is(err, roomService.ErrRoomNotFound):
+			code = ErrorRoomNotFound
 			message = "room not found"
 		case errors.Is(err, roomService.ErrParticipantNotFound):
+			code = ErrorInvalidPayload
 			message = "participant not found"
 		case errors.Is(err, roomService.ErrCannotKickYourself):
+			code = ErrorForbidden
 			message = "cannot kick yourself"
 		case errors.Is(err, roomService.ErrRoomModerationLocked):
+			code = ErrorForbidden
 			message = "room moderation is locked"
 		}
 
-		h.sendServerMessage(client, ServerMessage{
-			Type: "error",
-			Payload: ErrorPayload{
-				Message: message,
-			},
-		})
+		h.sendError(client, code, message)
 		return
 	}
 
@@ -1287,6 +1146,16 @@ func (h *MessageHandler) sendServerMessage(client *centrifuge.Client, msg Server
 	if err := client.Send(data); err != nil {
 		h.loggerFromContext(client.Context()).With("clientID", client.ID(), "type", msg.Type, "error", err).Warnf("send server message failed")
 	}
+}
+
+func (h *MessageHandler) sendError(client *centrifuge.Client, code, message string) {
+	h.sendServerMessage(client, ServerMessage{
+		Type: "error",
+		Payload: ErrorPayload{
+			Code:    code,
+			Message: message,
+		},
+	})
 }
 
 func (h *MessageHandler) publish(ctx context.Context, channel string, data []byte) {

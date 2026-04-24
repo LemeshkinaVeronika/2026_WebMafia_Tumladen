@@ -3,12 +3,13 @@ package app
 import (
 	"errors"
 	"fmt"
-	"github.com/webmafia/tumladan/internal/middleware"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/webmafia/tumladan/internal/middleware"
+	"github.com/webmafia/tumladan/pkg/minio"
 	"github.com/webmafia/tumladan/pkg/postgres"
 )
 
@@ -23,6 +24,7 @@ type Config struct {
 	RoomWaitingCleanupTTL time.Duration
 	RoomPlayingCleanupTTL time.Duration
 	Postgres              postgres.Config
+	MinIO                 minio.Config
 	CORS                  middleware.CORSConfig
 }
 
@@ -52,6 +54,13 @@ func Load() (*Config, error) {
 			MaxOpenConns:    getEnvInt("DB_MAX_OPEN_CONNS", 10),
 			MaxIdleConns:    getEnvInt("DB_MAX_IDLE_CONNS", 5),
 			ConnMaxLifetime: getEnvDuration("DB_CONN_MAX_LIFETIME", 30*time.Minute),
+		},
+		MinIO: minio.Config{
+			Endpoint:  getEnv("MINIO_ENDPOINT", "localhost:9000"),
+			AccessKey: getEnv("MINIO_ACCESS_KEY", "minioadmin"),
+			SecretKey: getEnv("MINIO_SECRET_KEY", "minioadmin"),
+			Bucket:    getEnv("MINIO_BUCKET", "tumladan-assets"),
+			UseSSL:    getEnvBool("MINIO_USE_SSL", false),
 		},
 		CORS: middleware.CORSConfig{
 			AllowedOrigins: getEnvCSV("CORS_ALLOWED_ORIGINS", []string{
@@ -121,6 +130,20 @@ func getEnvInt(key string, fallback int) int {
 	}
 
 	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+
+	return parsed
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.ParseBool(value)
 	if err != nil {
 		return fallback
 	}

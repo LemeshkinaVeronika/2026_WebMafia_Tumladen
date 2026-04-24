@@ -24,6 +24,7 @@ type Service struct {
 	repo       IRepository
 	terminator MatchTerminator
 	games      *gameService.Facade
+	roomLocks  *roomLocks
 }
 
 func New(repo IRepository, terminator MatchTerminator, games *gameService.Facade) *Service {
@@ -31,5 +32,6 @@ func New(repo IRepository, terminator MatchTerminator, games *gameService.Facade
 		repo:       repo,
 		terminator: terminator,
 		games:      games,
+		roomLocks:  newRoomLocks(),
 	}
 }
