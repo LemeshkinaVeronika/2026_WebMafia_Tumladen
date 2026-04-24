@@ -13,15 +13,16 @@ type PlayerState struct {
 }
 
 type PublicGameState struct {
-	Version         int           `json:"version"`
-	Phase           Phase         `json:"phase"`
-	TurnNumber      int           `json:"turnNumber"`
-	CurrentPlayerID string        `json:"currentPlayerId"`
-	Players         []PlayerState `json:"players"`
-	Board           []PlacedTile  `json:"board"`
-	CurrentTile     *TileView     `json:"currentTile,omitempty"`
-	DeckRemaining   int           `json:"deckRemaining"`
-	Settings        MatchSettings `json:"settings"`
+	Version            int            `json:"version"`
+	Phase              Phase          `json:"phase"`
+	TurnNumber         int            `json:"turnNumber"`
+	CurrentPlayerID    string         `json:"currentPlayerId"`
+	Players            []PlayerState  `json:"players"`
+	Board              []PlacedTile   `json:"board"`
+	Meeples            []PlacedMeeple `json:"meeples"`
+	CurrentTile        *TileView      `json:"currentTile,omitempty"`
+	DeckRemainingCount int            `json:"deckRemaining"`
+	Settings           MatchSettings  `json:"settings"`
 }
 
 type GameState struct {
@@ -65,6 +66,9 @@ type TileView struct {
 }
 
 type PrivateGameState struct {
+	IsYourTurn            bool                   `json:"isYourTurn"`
+	Phase                 string                 `json:"phase"`
+	CurrentPlayerID       string                 `json:"currentPlayerId"`
 	AllowedTilePlacements []AllowedTilePlacement `json:"allowedTilePlacements,omitempty"`
 	AllowedMeepleZones    []string               `json:"allowedMeepleZones,omitempty"`
 	CanSkipMeeple         bool                   `json:"canSkipMeeple"`

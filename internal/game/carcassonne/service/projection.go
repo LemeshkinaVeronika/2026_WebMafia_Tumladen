@@ -30,15 +30,16 @@ func (e *Engine) BuildPublicState(match *model.Match, _ []model.MatchPlayer) (js
 	}
 
 	publicState := carcassonneDTO.PublicGameState{
-		Version:         state.Version,
-		Phase:           state.Phase,
-		TurnNumber:      state.TurnNumber,
-		CurrentPlayerID: state.CurrentPlayerID,
-		Players:         state.Players,
-		Board:           state.Board,
-		CurrentTile:     currentTile,
-		DeckRemaining:   len(state.DeckRemaining),
-		Settings:        state.Settings,
+		Version:            state.Version,
+		Phase:              state.Phase,
+		TurnNumber:         state.TurnNumber,
+		CurrentPlayerID:    state.CurrentPlayerID,
+		Players:            state.Players,
+		Board:              state.Board,
+		Meeples:            state.Meeples,
+		CurrentTile:        currentTile,
+		DeckRemainingCount: len(state.DeckRemaining),
+		Settings:           state.Settings,
 	}
 
 	data, err := json.Marshal(publicState)
@@ -55,9 +56,13 @@ func (e *Engine) BuildPrivateState(match *model.Match, _ []model.MatchPlayer, ac
 		return nil, err
 	}
 
-	privateState := carcassonneDTO.PrivateGameState{}
+	privateState := carcassonneDTO.PrivateGameState{
+		IsYourTurn:      state.CurrentPlayerID == actorID,
+		Phase:           string(state.Phase),
+		CurrentPlayerID: state.CurrentPlayerID,
+	}
 
-	if state.CurrentPlayerID == actorID {
+	if privateState.IsYourTurn {
 		switch state.Phase {
 		case carcassonneDTO.PhasePlaceTile:
 			privateState.AllowedTilePlacements = e.allowedTilePlacements(state)
