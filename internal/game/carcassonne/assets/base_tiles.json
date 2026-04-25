@@ -1,7 +1,7 @@
 [
   {
     "tileId": "start_tile",
-    "imageKey": "start_tile.png",
+    "imageKey": "start_tile.webp",
     "count": 0,
     "edges": {
       "top": "city",
@@ -34,7 +34,7 @@
   },
   {
     "tileId": "monastery_road",
-    "imageKey": "monastery_road.png",
+    "imageKey": "monastery_road.webp",
     "count": 2,
     "edges": {
       "top": "field",
@@ -74,7 +74,7 @@
   },
   {
     "tileId": "monastery",
-    "imageKey": "monastery.png",
+    "imageKey": "monastery.webp",
     "count": 4,
     "edges": {
       "top": "field",
@@ -110,7 +110,7 @@
   },
   {
     "tileId": "city_full_shield",
-    "imageKey": "city_full_shield.png",
+    "imageKey": "city_full_shield.webp",
     "count": 1,
     "edges": {
       "top": "city",
@@ -143,7 +143,7 @@
   },
   {
     "tileId": "city_road_straight",
-    "imageKey": "city_road_straight.png",
+    "imageKey": "city_road_straight.webp",
     "count": 3,
     "edges": {
       "top": "road",
@@ -176,7 +176,7 @@
   },
   {
     "tileId": "city_cap",
-    "imageKey": "city_cap.png",
+    "imageKey": "city_cap.webp",
     "count": 2,
     "edges": {
       "top": "city",
@@ -210,7 +210,7 @@
   },
   {
     "tileId": "city_straight_shield",
-    "imageKey": "city_straight_shield.png",
+    "imageKey": "city_straight_shield.webp",
     "count": 2,
     "edges": {
       "top": "field",
@@ -247,7 +247,7 @@
   },
   {
     "tileId": "city_straight",
-    "imageKey": "city_straight.png",
+    "imageKey": "city_straight.webp",
     "count": 1,
     "edges": {
       "top": "city",
@@ -283,7 +283,7 @@
   },
   {
     "tileId": "double_city_opposite",
-    "imageKey": "double_city_opposite.png",
+    "imageKey": "double_city_opposite.webp",
     "count": 3,
     "edges": {
       "top": "field",
@@ -319,7 +319,7 @@
   },
   {
     "tileId": "double_city_curve",
-    "imageKey": "double_city_curve.png",
+    "imageKey": "double_city_curve.webp",
     "count": 2,
     "edges": {
       "top": "field",
@@ -355,7 +355,7 @@
   },
   {
     "tileId": "city_cap_with_road",
-    "imageKey": "city_cap_with_road.png",
+    "imageKey": "city_cap_with_road.webp",
     "count": 3,
     "edges": {
       "top": "city",
@@ -388,7 +388,7 @@
   },
   {
     "tileId": "road_curve_city_side",
-    "imageKey": "road_curve_city_side.png",
+    "imageKey": "road_curve_city_side.webp",
     "count": 3,
     "edges": {
       "top": "road",
@@ -421,7 +421,7 @@
   },
   {
     "tileId": "road_t_city_side",
-    "imageKey": "road_t_city_side.png",
+    "imageKey": "road_t_city_side.webp",
     "count": 3,
     "edges": {
       "top": "road",
@@ -469,7 +469,7 @@
   },
   {
     "tileId": "city_curve_shield",
-    "imageKey": "city_curve_shield.png",
+    "imageKey": "city_curve_shield.webp",
     "count": 2,
     "edges": {
       "top": "city",
@@ -501,7 +501,7 @@
   },
   {
     "tileId": "city_curve",
-    "imageKey": "city_curve.png",
+    "imageKey": "city_curve.webp",
     "count": 3,
     "edges": {
       "top": "city",
@@ -532,7 +532,7 @@
   },
   {
     "tileId": "city_curve_with_road_curve_shield",
-    "imageKey": "city_curve_with_road_curve_shield.png",
+    "imageKey": "city_curve_with_road_curve_shield.webp",
     "count": 2,
     "edges": {
       "top": "city",
@@ -566,7 +566,7 @@
   },
   {
     "tileId": "city_curve_with_road_curve",
-    "imageKey": "city_curve_with_road_curve.png",
+    "imageKey": "city_curve_with_road_curve.webp",
     "count": 3,
     "edges": {
       "top": "city",
@@ -599,7 +599,7 @@
   },
   {
     "tileId": "city_gate_shield",
-    "imageKey": "city_gate_shield.png",
+    "imageKey": "city_gate_shield.webp",
     "count": 1,
     "edges": {
       "top": "city",
@@ -633,7 +633,7 @@
   },
   {
     "tileId": "city_gate",
-    "imageKey": "city_gate.png",
+    "imageKey": "city_gate.webp",
     "count": 3,
     "edges": {
       "top": "city",
@@ -666,7 +666,7 @@
   },
   {
     "tileId": "city_gate_shield_with_road",
-    "imageKey": "city_gate_shield_with_road.png",
+    "imageKey": "city_gate_shield_with_road.webp",
     "count": 2,
     "edges": {
       "top": "city",
@@ -710,7 +710,7 @@
   },
   {
     "tileId": "city_gate_with_road",
-    "imageKey": "city_gate_with_road.png",
+    "imageKey": "city_gate_with_road.webp",
     "count": 1,
     "edges": {
       "top": "city",
@@ -753,7 +753,7 @@
   },
   {
     "tileId": "road_straight",
-    "imageKey": "road_straight.png",
+    "imageKey": "road_straight.webp",
     "count": 8,
     "edges": {
       "top": "road",
@@ -781,7 +781,7 @@
   },
   {
     "tileId": "road_curve",
-    "imageKey": "road_curve.png",
+    "imageKey": "road_curve.webp",
     "count": 9,
     "edges": {
       "top": "field",
@@ -818,7 +818,7 @@
   },
   {
     "tileId": "road_t",
-    "imageKey": "road_t.png",
+    "imageKey": "road_t.webp",
     "count": 4,
     "edges": {
       "top": "field",
@@ -861,7 +861,7 @@
   },
   {
     "tileId": "road_cross",
-    "imageKey": "road_cross.png",
+    "imageKey": "road_cross.webp",
     "count": 1,
     "edges": {
       "top": "road",
