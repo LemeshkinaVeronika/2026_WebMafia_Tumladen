@@ -388,6 +388,7 @@ func (r *Repository) StartRoomWithMatch(ctx context.Context, roomID string, matc
 func (r *Repository) TerminateActiveMatch(
 	ctx context.Context,
 	roomID string,
+	state *model.JSONB,
 	reason model.MatchTerminationReason,
 	result *model.JSONB,
 	terminatedByActorID *string,
@@ -418,7 +419,12 @@ func (r *Repository) TerminateActiveMatch(
 		return nil, nil, fmt.Errorf("[%s]: list match players failed: %w", op, err)
 	}
 
-	if err := r.terminateMatchTx(ctx, tx, match.ID, match.GameState, result, reason, terminatedByActorID, terminatedAt); err != nil {
+	nextState := match.GameState
+	if state != nil {
+		nextState = *state
+	}
+
+	if err := r.terminateMatchTx(ctx, tx, match.ID, nextState, result, reason, terminatedByActorID, terminatedAt); err != nil {
 		return nil, nil, fmt.Errorf("[%s]: update match failed: %w", op, err)
 	}
 
@@ -428,6 +434,7 @@ func (r *Repository) TerminateActiveMatch(
 	}
 
 	match.Status = model.MatchStatusFinished
+	match.GameState = nextState
 	match.Result = result
 	match.TerminationReason = &reason
 	match.TerminatedByActorID = terminatedByActorID

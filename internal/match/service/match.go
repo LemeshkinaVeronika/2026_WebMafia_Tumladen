@@ -96,10 +96,11 @@ func (s *Service) ApplyAction(ctx context.Context, req dto.ApplyMatchActionReque
 		}
 
 		if err := s.terminator.FinishRoomMatch(ctx, roomDTO.FinishRoomMatchRequest{
-			ActorID: &req.ActorID,
-			RoomID:  req.RoomID,
-			Reason:  string(model.MatchTerminationReasonNormalCompletion),
-			Result:  json.RawMessage(resultOrNull(actionResult.Result)),
+			ActorID:   &req.ActorID,
+			RoomID:    req.RoomID,
+			Reason:    string(model.MatchTerminationReasonNormalCompletion),
+			GameState: json.RawMessage(actionResult.NextState),
+			Result:    json.RawMessage(resultOrNull(actionResult.Result)),
 		}); err != nil {
 			return nil, err
 		}

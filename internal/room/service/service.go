@@ -23,7 +23,7 @@ type IRepository interface {
 
 	StartRoomWithMatch(ctx context.Context, roomID string, match *model.Match, players []model.MatchPlayer) (*model.Room, []model.RoomParticipant, error)
 
-	TerminateActiveMatch(ctx context.Context, roomID string, reason model.MatchTerminationReason, result *model.JSONB, terminatedByActorID *string, terminatedAt time.Time) (*model.Match, []model.MatchPlayer, error)
+	TerminateActiveMatch(ctx context.Context, roomID string, state *model.JSONB, reason model.MatchTerminationReason, result *model.JSONB, terminatedByActorID *string, terminatedAt time.Time) (*model.Match, []model.MatchPlayer, error)
 	MarkActiveMatchPlayerDisconnected(ctx context.Context, roomID, actorID string, disconnectedAt time.Time) error
 	MarkActiveMatchPlayerConnected(ctx context.Context, roomID, actorID string) error
 	FindRoomsWithReconnectTimeout(ctx context.Context, olderThan time.Time) ([]model.Room, error)

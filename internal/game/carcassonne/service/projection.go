@@ -16,30 +16,48 @@ func (e *Engine) BuildPublicState(match *model.Match, _ []model.MatchPlayer) (js
 		return nil, err
 	}
 
-	var currentTile *carcassonneDTO.TileView
+	var drawnTile *carcassonneDTO.TileView
 	if state.CurrentTile != nil {
-		def, ok := e.catalog.Get(state.CurrentTile.TileID)
-		if !ok {
-			return nil, gameService.ErrInvalidMatchAction
+		tile, err := e.tileView(state.CurrentTile.TileID)
+		if err != nil {
+			return nil, err
 		}
+		drawnTile = tile
+	} else if state.LastPlacedTile != nil {
+		tile, err := e.tileView(state.LastPlacedTile.TileID)
+		if err != nil {
+			return nil, err
+		}
+		drawnTile = tile
+	}
 
-		currentTile = &carcassonneDTO.TileView{
-			TileID:   def.TileID,
-			ImageKey: def.ImageKey,
-		}
+	currentPlayerID := currentPlayerIDView(state)
+	result, err := publicMatchResult(match)
+	if err != nil {
+		return nil, err
 	}
 
 	publicState := carcassonneDTO.PublicGameState{
-		Version:            state.Version,
-		Phase:              state.Phase,
-		TurnNumber:         state.TurnNumber,
-		CurrentPlayerID:    state.CurrentPlayerID,
-		Players:            state.Players,
-		Board:              state.Board,
-		Meeples:            state.Meeples,
-		CurrentTile:        currentTile,
-		DeckRemainingCount: len(state.DeckRemaining),
-		Settings:           state.Settings,
+		Version:         state.Version,
+		Status:          string(match.Status),
+		Phase:           state.Phase,
+		TurnNumber:      state.TurnNumber,
+		CurrentPlayerID: currentPlayerID,
+		Players:         state.Players,
+		CurrentTurn: carcassonneDTO.CurrentTurnState{
+			DrawnTile:    drawnTile,
+			PlacedTile:   state.LastPlacedTile,
+			MeeplePlaced: meeplePlacedOnLastTile(state),
+		},
+		Deck: carcassonneDTO.DeckState{
+			RemainingCount: len(state.DeckRemaining),
+		},
+		Board: carcassonneDTO.BoardState{
+			Tiles: state.Board,
+		},
+		Meeples:  state.Meeples,
+		Settings: state.Settings,
+		Result:   result,
 	}
 
 	data, err := json.Marshal(publicState)
@@ -50,6 +68,50 @@ func (e *Engine) BuildPublicState(match *model.Match, _ []model.MatchPlayer) (js
 	return data, nil
 }
 
+func publicMatchResult(match *model.Match) (*carcassonneDTO.MatchResult, error) {
+	if match == nil || match.Result == nil || len(*match.Result) == 0 || string(*match.Result) == "null" {
+		return nil, nil
+	}
+
+	var result carcassonneDTO.MatchResult
+	if err := json.Unmarshal(*match.Result, &result); err != nil {
+		return nil, err
+	}
+
+	return &result, nil
+}
+
+func (e *Engine) tileView(tileID string) (*carcassonneDTO.TileView, error) {
+	def, ok := e.catalog.Get(tileID)
+	if !ok {
+		return nil, gameService.ErrInvalidMatchAction
+	}
+
+	return &carcassonneDTO.TileView{
+		TileID:   def.TileID,
+		ImageURL: def.ImageKey,
+	}, nil
+}
+
+func currentPlayerIDView(state carcassonneDTO.GameState) *string {
+	if state.Phase == carcassonneDTO.PhaseFinished || state.CurrentPlayerID == "" {
+		return nil
+	}
+
+	currentPlayerID := state.CurrentPlayerID
+	return &currentPlayerID
+}
+
+func meeplePlacedOnLastTile(state carcassonneDTO.GameState) bool {
+	if state.LastPlacedTile == nil {
+		return false
+	}
+
+	return slices.ContainsFunc(state.Meeples, func(meeple carcassonneDTO.PlacedMeeple) bool {
+		return meeple.TileInstanceID == state.LastPlacedTile.InstanceID
+	})
+}
+
 func (e *Engine) BuildPrivateState(match *model.Match, _ []model.MatchPlayer, actorID string) (json.RawMessage, error) {
 	var state carcassonneDTO.GameState
 	if err := json.Unmarshal(match.GameState, &state); err != nil {
@@ -57,18 +119,25 @@ func (e *Engine) BuildPrivateState(match *model.Match, _ []model.MatchPlayer, ac
 	}
 
 	privateState := carcassonneDTO.PrivateGameState{
-		IsYourTurn:      state.CurrentPlayerID == actorID,
-		Phase:           state.Phase,
-		CurrentPlayerID: state.CurrentPlayerID,
+		IsYourTurn:            state.CurrentPlayerID == actorID && state.Phase != carcassonneDTO.PhaseFinished,
+		Phase:                 state.Phase,
+		CurrentPlayerID:       currentPlayerIDView(state),
+		AllowedActions:        []carcassonneDTO.Action{},
+		ValidPlacements:       []carcassonneDTO.ValidTilePlacement{},
+		ValidMeeplePlacements: []carcassonneDTO.ValidMeeplePlacement{},
 	}
 
 	if privateState.IsYourTurn {
 		switch state.Phase {
 		case carcassonneDTO.PhasePlaceTile:
-			privateState.AllowedTilePlacements = e.allowedTilePlacements(state)
+			privateState.AllowedActions = []carcassonneDTO.Action{carcassonneDTO.ActionPlaceTile}
+			privateState.ValidPlacements = e.validTilePlacements(state)
 		case carcassonneDTO.PhasePlaceMeeple:
-			privateState.AllowedMeepleZones = e.allowedMeepleZones(state, actorID)
-			privateState.CanSkipMeeple = true
+			privateState.ValidMeeplePlacements = e.validMeeplePlacements(state, actorID)
+			if len(privateState.ValidMeeplePlacements) > 0 {
+				privateState.AllowedActions = append(privateState.AllowedActions, carcassonneDTO.ActionPlaceMeeple)
+			}
+			privateState.AllowedActions = append(privateState.AllowedActions, carcassonneDTO.ActionSkipMeeple)
 		}
 	}
 
@@ -80,9 +149,9 @@ func (e *Engine) BuildPrivateState(match *model.Match, _ []model.MatchPlayer, ac
 	return data, nil
 }
 
-func (e *Engine) allowedTilePlacements(state carcassonneDTO.GameState) []carcassonneDTO.AllowedTilePlacement {
+func (e *Engine) validTilePlacements(state carcassonneDTO.GameState) []carcassonneDTO.ValidTilePlacement {
 	if state.CurrentTile == nil {
-		return []carcassonneDTO.AllowedTilePlacement{}
+		return []carcassonneDTO.ValidTilePlacement{}
 	}
 
 	candidates := make(map[[2]int]struct{}, len(state.Board)*4)
@@ -99,48 +168,56 @@ func (e *Engine) allowedTilePlacements(state carcassonneDTO.GameState) []carcass
 		}
 	}
 
-	placements := make([]carcassonneDTO.AllowedTilePlacement, 0, len(candidates)*4)
+	placementsByCoordinate := make(map[[2]int][]int, len(candidates))
 	for coordinate := range candidates {
 		for _, rotation := range []int{0, 90, 180, 270} {
 			if e.canPlaceTile(*state.CurrentTile, coordinate[0], coordinate[1], rotation, state.Board) {
-				placements = append(placements, carcassonneDTO.AllowedTilePlacement{
-					X:        coordinate[0],
-					Y:        coordinate[1],
-					Rotation: rotation,
-				})
+				placementsByCoordinate[coordinate] = append(placementsByCoordinate[coordinate], rotation)
 			}
 		}
 	}
 
-	slices.SortFunc(placements, func(a, b carcassonneDTO.AllowedTilePlacement) int {
+	placements := make([]carcassonneDTO.ValidTilePlacement, 0, len(placementsByCoordinate))
+	for coordinate, rotations := range placementsByCoordinate {
+		placements = append(placements, carcassonneDTO.ValidTilePlacement{
+			X:         coordinate[0],
+			Y:         coordinate[1],
+			Rotations: rotations,
+		})
+	}
+
+	slices.SortFunc(placements, func(a, b carcassonneDTO.ValidTilePlacement) int {
 		if a.X != b.X {
 			return a.X - b.X
 		}
 		if a.Y != b.Y {
 			return a.Y - b.Y
 		}
-		return a.Rotation - b.Rotation
+		return 0
 	})
 
 	return placements
 }
 
-func (e *Engine) allowedMeepleZones(state carcassonneDTO.GameState, actorID string) []string {
+func (e *Engine) validMeeplePlacements(state carcassonneDTO.GameState, actorID string) []carcassonneDTO.ValidMeeplePlacement {
 	if state.LastPlacedTile == nil || meeplesLeft(state.Players, actorID) <= 0 {
-		return []string{}
+		return []carcassonneDTO.ValidMeeplePlacement{}
 	}
 
 	def, ok := e.catalog.Get(state.LastPlacedTile.TileID)
 	if !ok {
-		return []string{}
+		return []carcassonneDTO.ValidMeeplePlacement{}
 	}
 
-	zones := make([]string, 0, len(def.Zones))
+	placements := make([]carcassonneDTO.ValidMeeplePlacement, 0, len(def.Zones))
 	for _, zone := range def.Zones {
 		if e.canPlaceMeeple(state, actorID, zone.ZoneID) {
-			zones = append(zones, zone.ZoneID)
+			placements = append(placements, carcassonneDTO.ValidMeeplePlacement{
+				ZoneID:      zone.ZoneID,
+				FeatureType: zone.Type,
+			})
 		}
 	}
 
-	return zones
+	return placements
 }

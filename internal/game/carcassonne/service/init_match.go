@@ -64,9 +64,10 @@ func (e *Engine) BuildInitialMatch(room *model.Room, participants []model.RoomPa
 	var result *model.JSONB
 	if currentTile == nil {
 		phase = carcassonneDTO.PhaseFinished
+		currentPlayerID = ""
 		status = model.MatchStatusFinished
 
-		rawResult, err := json.Marshal(statePlayers)
+		rawResult, err := json.Marshal(matchResult(statePlayers))
 		if err != nil {
 			return nil, nil, err
 		}

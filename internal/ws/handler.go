@@ -275,7 +275,13 @@ func (h *MessageHandler) HandleMessage(client *centrifuge.Client, message []byte
 	}
 }
 
-func (h *MessageHandler) OnDisconnect(client *centrifuge.Client, _ centrifuge.DisconnectEvent) {
+func (h *MessageHandler) OnDisconnect(client *centrifuge.Client, event centrifuge.DisconnectEvent) {
+	h.loggerFromContext(client.Context()).With(
+		"clientID", client.ID(),
+		"code", event.Disconnect.Code,
+		"reason", event.Disconnect.Reason,
+	).Warnf("websocket client disconnected")
+
 	state, ok := h.registry.Remove(client.ID())
 	if !ok {
 		h.loggerFromContext(client.Context()).With("clientID", client.ID()).Warnf("disconnect for unknown client")
@@ -615,11 +621,15 @@ func (h *MessageHandler) handleStartRoom(ctx context.Context, state *ConnectionS
 	}
 
 	if matchState.Status == string(model.MatchStatusFinished) {
+		h.broadcastMatchState(ctx, p.RoomID, matchState)
 		h.broadcastMatchFinished(ctx, p.RoomID)
 		return
 	}
 
 	h.broadcastMatchState(ctx, p.RoomID, matchState)
+	if matchState.Status == string(model.MatchStatusFinished) {
+		h.broadcastMatchFinished(ctx, p.RoomID)
+	}
 }
 
 func (h *MessageHandler) broadcastRoomState(ctx context.Context, roomID string, roomState any) {
@@ -764,6 +774,9 @@ func (h *MessageHandler) handleMatchAction(ctx context.Context, state *Connectio
 	}
 
 	h.broadcastMatchState(ctx, p.RoomID, matchState)
+	if matchState.Status == string(model.MatchStatusFinished) {
+		h.broadcastMatchFinished(ctx, p.RoomID)
+	}
 }
 
 func marshalRawMessage(v any) json.RawMessage {
@@ -1119,8 +1132,77 @@ func (h *MessageHandler) broadcastMatchFinished(ctx context.Context, roomID stri
 
 	matchState, err := h.matchService.GetLastByRoomID(ctx, roomID)
 	if err == nil {
-		h.broadcastMatchEvent(ctx, roomID, "match_finished", h.publicMatchStatePayload(ctx, matchState))
+		h.broadcastMatchFinishedEvent(ctx, roomID, matchState)
 	}
+}
+
+func (h *MessageHandler) broadcastMatchFinishedEvent(ctx context.Context, roomID string, matchState *matchDTO.MatchResponse) {
+	h.broadcastMatchEvent(ctx, roomID, "match_finished", h.matchFinishedPayload(ctx, matchState))
+}
+
+func (h *MessageHandler) matchFinishedPayload(ctx context.Context, matchState *matchDTO.MatchResponse) any {
+	if matchState == nil {
+		return emptyMatchFinishedPayload()
+	}
+
+	if len(matchState.Result) > 0 && strings.TrimSpace(string(matchState.Result)) != "null" {
+		return matchFinishedResultPayload(matchState, matchState.Result)
+	}
+
+	match, players := modelMatchFromResponse(matchState)
+	gameState, err := h.games.BuildPublicState(match, players)
+	if err != nil {
+		h.loggerFromContext(ctx).With("matchID", matchState.ID, "gameType", matchState.GameType, "error", err).Warnf("build finished match payload failed")
+		return terminatedMatchFinishedPayload(matchState)
+	}
+
+	var publicState struct {
+		Result json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal(gameState, &publicState); err != nil || len(publicState.Result) == 0 || strings.TrimSpace(string(publicState.Result)) == "null" {
+		return terminatedMatchFinishedPayload(matchState)
+	}
+
+	return matchFinishedResultPayload(matchState, publicState.Result)
+}
+
+func matchFinishedResultPayload(matchState *matchDTO.MatchResponse, result json.RawMessage) any {
+	var payload map[string]any
+	if err := json.Unmarshal(result, &payload); err != nil {
+		return json.RawMessage(result)
+	}
+
+	payload["matchId"] = matchState.ID
+	payload["roomId"] = matchState.RoomID
+	return payload
+}
+
+func emptyMatchFinishedPayload() map[string]any {
+	return map[string]any{
+		"winners":     []string{},
+		"finalScores": []any{},
+	}
+}
+
+func terminatedMatchFinishedPayload(matchState *matchDTO.MatchResponse) map[string]any {
+	payload := emptyMatchFinishedPayload()
+	if matchState == nil {
+		return payload
+	}
+
+	payload["matchId"] = matchState.ID
+	payload["roomId"] = matchState.RoomID
+	if matchState.TerminationReason != nil {
+		payload["terminationReason"] = *matchState.TerminationReason
+	}
+	if matchState.TerminatedByActorID != nil {
+		payload["terminatedByActorId"] = *matchState.TerminatedByActorID
+	}
+	if matchState.TerminatedAt != nil {
+		payload["terminatedAt"] = *matchState.TerminatedAt
+	}
+
+	return payload
 }
 
 func (h *Handler) NotifyMatchFinished(ctx context.Context, roomID string) {

@@ -49,7 +49,7 @@ type TileDefinition struct {
 
 type TileCatalogItem struct {
 	TileID     string           `json:"tileId"`
-	ImageKey   string           `json:"imageKey"`
+	ImageURL   string           `json:"imageUrl"`
 	Edges      TileEdges        `json:"edges"`
 	Zones      []ZoneDefinition `json:"zones"`
 	Segments   []ZoneSegment    `json:"segments"`

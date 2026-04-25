@@ -116,8 +116,9 @@ func (e *Engine) completeTurnAndDrawNextTile(state *carcassonneDTO.GameState) (g
 		}
 
 		state.Phase = carcassonneDTO.PhaseFinished
+		state.CurrentPlayerID = ""
 
-		result, err := json.Marshal(state.Players)
+		result, err := json.Marshal(matchResult(state.Players))
 		if err != nil {
 			return gameService.ApplyActionResult{}, err
 		}
@@ -142,6 +143,33 @@ func (e *Engine) completeTurnAndDrawNextTile(state *carcassonneDTO.GameState) (g
 	state.Phase = carcassonneDTO.PhasePlaceTile
 
 	return marshalActionResult(*state, model.MatchStatusActive, nil)
+}
+
+func matchResult(players []carcassonneDTO.PlayerState) carcassonneDTO.MatchResult {
+	finalScores := make([]carcassonneDTO.FinalScore, 0, len(players))
+	maxScore := 0
+
+	for i, player := range players {
+		finalScores = append(finalScores, carcassonneDTO.FinalScore{
+			ActorID: player.ActorID,
+			Score:   player.Score,
+		})
+		if i == 0 || player.Score > maxScore {
+			maxScore = player.Score
+		}
+	}
+
+	winners := make([]string, 0)
+	for _, player := range players {
+		if player.Score == maxScore {
+			winners = append(winners, player.ActorID)
+		}
+	}
+
+	return carcassonneDTO.MatchResult{
+		Winners:     winners,
+		FinalScores: finalScores,
+	}
 }
 
 func (e *Engine) drawNextPlaceableTile(

@@ -350,9 +350,15 @@ func (s *Service) FinishRoomMatch(ctx context.Context, req dto.FinishRoomMatchRe
 		result = &raw
 	}
 
+	var gameState *model.JSONB
+	if len(req.GameState) > 0 && string(req.GameState) != "null" {
+		raw := model.JSONB(req.GameState)
+		gameState = &raw
+	}
+
 	terminatedAt := time.Now().UTC()
 
-	_, _, err = s.repo.TerminateActiveMatch(ctx, req.RoomID, reason, result, req.ActorID, terminatedAt)
+	_, _, err = s.repo.TerminateActiveMatch(ctx, req.RoomID, gameState, reason, result, req.ActorID, terminatedAt)
 	if err != nil {
 		switch {
 		case errors.Is(err, roomPostgres.ErrNotFound):

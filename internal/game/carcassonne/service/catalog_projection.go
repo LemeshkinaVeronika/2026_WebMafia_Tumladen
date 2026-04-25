@@ -23,7 +23,7 @@ func (e *Engine) BuildTileCatalog() (json.RawMessage, error) {
 
 		items = append(items, carcassonneDTO.TileCatalogItem{
 			TileID:     def.TileID,
-			ImageKey:   def.ImageKey,
+			ImageURL:   def.ImageKey,
 			Edges:      def.Edges,
 			Zones:      def.Zones,
 			Segments:   segments,
