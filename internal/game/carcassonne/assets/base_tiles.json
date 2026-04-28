@@ -13,17 +13,17 @@
       {
         "zoneId": "city_1",
         "type": "city",
-        "segments": ["top_left", "top_center", "top_right"]
+        "segments": ["top_center", "top_left",  "top_right"]
       },
       {
         "zoneId": "road_1",
         "type": "road",
-        "segments": ["left_center", "center", "right_center"]
+        "segments": ["center", "left_center", "right_center"]
       },
       {
         "zoneId": "field_1",
         "type": "field",
-        "segments": ["left_bottom", "bottom_left", "bottom_center", "bottom_right", "right_bottom"]
+        "segments": ["bottom_center", "left_bottom", "bottom_left",  "bottom_right", "right_bottom"]
       },
       {
         "zoneId": "field_2",
@@ -124,6 +124,7 @@
         "type": "city",
         "hasPennant": true,
         "segments": [
+          "center",
           "top_left",
           "top_center",
           "top_right",
@@ -135,8 +136,7 @@
           "bottom_right",
           "left_bottom",
           "left_center",
-          "left_top",
-          "center"
+          "left_top"
         ]
       }
     ]
@@ -155,12 +155,12 @@
       {
         "zoneId": "city_1",
         "type": "city",
-        "segments": ["right_top", "right_center", "right_bottom"]
+        "segments": ["right_center", "right_top", "right_bottom"]
       },
       {
         "zoneId": "road_1",
         "type": "road",
-        "segments": ["top_center", "center", "bottom_center"]
+        "segments": ["center", "top_center",  "bottom_center"]
       },
       {
         "zoneId": "field_1",
@@ -188,12 +188,13 @@
       {
         "zoneId": "city_1",
         "type": "city",
-        "segments": ["top_left", "top_center", "top_right"]
+        "segments": ["top_center", "top_left",  "top_right"]
       },
       {
         "zoneId": "field_1",
         "type": "field",
         "segments": [
+          "center",
           "right_top",
           "right_center",
           "right_bottom",
@@ -202,8 +203,7 @@
           "bottom_right",
           "left_bottom",
           "left_center",
-          "left_top",
-          "center"
+          "left_top"
         ]
       }
     ]
@@ -224,24 +224,24 @@
         "type": "city",
         "hasPennant": true,
         "segments": [
+          "center",
           "right_top",
           "right_center",
           "right_bottom",
           "left_bottom",
           "left_center",
-          "left_top",
-          "center"
+          "left_top"
         ]
       },
       {
         "zoneId": "field_1",
         "type": "field",
-        "segments": ["top_left", "top_center", "top_right"]
+        "segments": ["top_center", "top_left",  "top_right"]
       },
       {
         "zoneId": "field_2",
         "type": "field",
-        "segments": ["bottom_left", "bottom_center", "bottom_right"]
+        "segments": ["bottom_center", "bottom_left", "bottom_right"]
       }
     ]
   },
@@ -260,24 +260,24 @@
         "zoneId": "city_1",
         "type": "city",
         "segments": [
+          "center",
           "top_left",
           "top_center",
           "top_right",
           "bottom_left",
           "bottom_center",
-          "bottom_right",
-          "center"
+          "bottom_right"
         ]
       },
       {
         "zoneId": "field_1",
         "type": "field",
-        "segments": ["right_top", "right_center", "right_bottom"]
+        "segments": ["right_center", "right_top",  "right_bottom"]
       },
       {
         "zoneId": "field_2",
         "type": "field",
-        "segments": ["left_bottom", "left_center", "left_top"]
+        "segments": ["left_center", "left_bottom", "left_top"]
       }
     ]
   },
@@ -295,24 +295,25 @@
       {
         "zoneId": "city_1",
         "type": "city",
-        "segments": ["right_top", "right_center", "right_bottom"]
+        "segments": ["right_center", "right_top",  "right_bottom"]
       },
       {
         "zoneId": "city_2",
         "type": "city",
-        "segments": ["left_bottom", "left_center", "left_top"]
+        "segments": ["left_center", "left_bottom",  "left_top"]
       },
       {
         "zoneId": "field_1",
         "type": "field",
         "segments": [
+          "center",
           "top_left",
           "top_center",
           "top_right",
           "bottom_left",
           "bottom_center",
-          "bottom_right",
-          "center"
+          "bottom_right"
+
         ]
       }
     ]
@@ -331,24 +332,24 @@
       {
         "zoneId": "city_1",
         "type": "city",
-        "segments": ["right_top", "right_center", "right_bottom"]
+        "segments": [ "right_center", "right_top", "right_bottom"]
       },
       {
         "zoneId": "city_2",
         "type": "city",
-        "segments": ["bottom_left", "bottom_center", "bottom_right"]
+        "segments": ["bottom_center", "bottom_left",  "bottom_right"]
       },
       {
         "zoneId": "field_1",
         "type": "field",
         "segments": [
+          "center",
           "left_bottom",
           "left_center",
           "left_top",
           "top_left",
           "top_center",
-          "top_right",
-          "center"
+          "top_right"
         ]
       }
     ]
@@ -367,12 +368,12 @@
       {
         "zoneId": "city_1",
         "type": "city",
-        "segments": ["top_left", "top_center", "top_right"]
+        "segments": ["top_center", "top_left",  "top_right"]
       },
       {
         "zoneId": "road_1",
         "type": "road",
-        "segments": ["bottom_center", "center", "right_center"]
+        "segments": [ "center", "bottom_center", "right_center"]
       },
       {
         "zoneId": "field_1",
@@ -400,7 +401,7 @@
       {
         "zoneId": "city_1",
         "type": "city",
-        "segments": ["right_top", "right_center", "right_bottom"]
+        "segments": ["right_center", "right_top", "right_bottom"]
       },
       {
         "zoneId": "road_1",
@@ -433,7 +434,7 @@
       {
         "zoneId": "city_1",
         "type": "city",
-        "segments": ["right_top", "right_center", "right_bottom"]
+        "segments": ["right_center", "right_top", "right_bottom"]
       },
       {
         "zoneId": "road_left",
@@ -482,19 +483,20 @@
         "zoneId": "city_1",
         "type": "city",
         "hasPennant": true,
-        "segments": ["top_left", "top_center", "top_right", "left_bottom", "left_center", "left_top"]
+        "segments": ["top_center", "top_left",  "top_right", "left_bottom", "left_center", "left_top"]
       },
       {
         "zoneId": "field_1",
         "type": "field",
         "segments": [
+          "center",
           "bottom_center",
           "bottom_right",
           "bottom_left",
           "right_top",
           "right_center",
-          "right_bottom",
-          "center"
+          "right_bottom"
+
         ]
       }
     ]
@@ -513,19 +515,19 @@
       {
         "zoneId": "city_1",
         "type": "city",
-        "segments": ["top_left", "top_center", "top_right", "left_bottom", "left_center", "left_top"]
+        "segments": ["top_center", "top_left",  "top_right", "left_bottom", "left_center", "left_top"]
       },
       {
         "zoneId": "field_1",
         "type": "field",
         "segments": [
+          "center",
           "bottom_center",
           "bottom_right",
           "bottom_left",
           "right_top",
           "right_center",
-          "right_bottom",
-          "center"
+          "right_bottom"
         ]
       }
     ]
@@ -545,12 +547,12 @@
         "zoneId": "city_1",
         "type": "city",
         "hasPennant": true,
-        "segments": ["top_left", "top_center", "top_right", "left_bottom", "left_center", "left_top"]
+        "segments": ["top_center", "top_left", "top_right", "left_bottom", "left_center", "left_top"]
       },
       {
         "zoneId": "road_1",
         "type": "road",
-        "segments": ["right_center", "bottom_center", "center"]
+        "segments": ["center", "right_center", "bottom_center" ]
       },
       {
         "zoneId": "field_1",
@@ -578,12 +580,12 @@
       {
         "zoneId": "city_1",
         "type": "city",
-        "segments": ["top_left", "top_center", "top_right", "left_bottom", "left_center", "left_top"]
+        "segments": ["top_center", "top_left",  "top_right", "left_bottom", "left_center", "left_top"]
       },
       {
         "zoneId": "road_1",
         "type": "road",
-        "segments": ["right_center", "bottom_center", "center"]
+        "segments": ["center","right_center", "bottom_center"]
       },
       {
         "zoneId": "field_1",
@@ -613,8 +615,8 @@
         "type": "city",
         "hasPennant": true,
         "segments": [
-          "right_top",
           "right_center",
+          "right_top",
           "right_bottom",
           "top_left",
           "top_center",
@@ -627,7 +629,7 @@
       {
         "zoneId": "field_1",
         "type": "field",
-        "segments": ["bottom_center", "bottom_right", "bottom_left", "center"]
+        "segments": ["center","bottom_center", "bottom_right", "bottom_left" ]
       }
     ]
   },
@@ -646,8 +648,8 @@
         "zoneId": "city_1",
         "type": "city",
         "segments": [
-          "right_top",
           "right_center",
+          "right_top",
           "right_bottom",
           "top_left",
           "top_center",
@@ -660,7 +662,7 @@
       {
         "zoneId": "field_1",
         "type": "field",
-        "segments": ["bottom_center", "bottom_right", "bottom_left", "center"]
+        "segments": ["center","bottom_center", "bottom_right", "bottom_left" ]
       }
     ]
   },
@@ -680,8 +682,8 @@
         "type": "city",
         "hasPennant": true,
         "segments": [
-          "right_top",
           "right_center",
+          "right_top",
           "right_bottom",
           "top_left",
           "top_center",
@@ -723,8 +725,8 @@
         "zoneId": "city_1",
         "type": "city",
         "segments": [
-          "right_top",
           "right_center",
+          "right_top",
           "right_bottom",
           "top_left",
           "top_center",

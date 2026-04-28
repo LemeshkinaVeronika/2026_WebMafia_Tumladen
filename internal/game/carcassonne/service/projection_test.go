@@ -58,8 +58,8 @@ func TestBuildPublicStateExposesExplicitTurnDeckAndBoard(t *testing.T) {
 	if publicState.CurrentPlayerID == nil || *publicState.CurrentPlayerID != "actor-a" {
 		t.Fatalf("currentPlayerId = %v, want actor-a", publicState.CurrentPlayerID)
 	}
-	if publicState.CurrentTurn.DrawnTile == nil || publicState.CurrentTurn.DrawnTile.ImageURL != "city_cap.png" {
-		t.Fatalf("drawnTile = %#v, want city_cap.png", publicState.CurrentTurn.DrawnTile)
+	if publicState.CurrentTurn.DrawnTile == nil || publicState.CurrentTurn.DrawnTile.ImageURL != "city_cap.webp" {
+		t.Fatalf("drawnTile = %#v, want city_cap.webp", publicState.CurrentTurn.DrawnTile)
 	}
 	if publicState.CurrentTurn.PlacedTile == nil || publicState.CurrentTurn.PlacedTile.InstanceID != "placed" {
 		t.Fatalf("placedTile = %#v, want placed", publicState.CurrentTurn.PlacedTile)
@@ -72,6 +72,9 @@ func TestBuildPublicStateExposesExplicitTurnDeckAndBoard(t *testing.T) {
 	}
 	if got, want := len(publicState.Board.Tiles), 2; got != want {
 		t.Fatalf("board tiles = %d, want %d", got, want)
+	}
+	if got, want := publicState.Meeples[0].FeatureType, carcassonneDTO.ZoneTypeCity; got != want {
+		t.Fatalf("meeple featureType = %s, want %s", got, want)
 	}
 }
 
@@ -189,7 +192,7 @@ func TestBuildPrivateStateExposesMeepleActionsAndZones(t *testing.T) {
 		t.Fatal("validMeeplePlacements is empty")
 	}
 	for _, placement := range privateState.ValidMeeplePlacements {
-		if placement.ZoneID == "" || placement.FeatureType == "" {
+		if placement.ZoneID == "" || placement.FeatureType == "" || placement.Segment == "" {
 			t.Fatalf("invalid meeple placement hint: %#v", placement)
 		}
 	}

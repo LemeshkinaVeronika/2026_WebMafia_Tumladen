@@ -57,9 +57,10 @@ type PlacedTile struct {
 }
 
 type PlacedMeeple struct {
-	TileInstanceID string `json:"tileInstanceId"`
-	ZoneID         string `json:"zoneId"`
-	ActorID        string `json:"actorId"`
+	TileInstanceID string   `json:"tileInstanceId"`
+	ZoneID         string   `json:"zoneId"`
+	ActorID        string   `json:"actorId"`
+	FeatureType    ZoneType `json:"featureType,omitempty"`
 }
 
 type TileView struct {
@@ -97,8 +98,9 @@ type ValidTilePlacement struct {
 }
 
 type ValidMeeplePlacement struct {
-	ZoneID      string   `json:"zoneId"`
-	FeatureType ZoneType `json:"featureType"`
+	ZoneID      string      `json:"zoneId"`
+	FeatureType ZoneType    `json:"featureType"`
+	Segment     ZoneSegment `json:"segment"`
 }
 
 type MatchResult struct {

@@ -42,6 +42,63 @@ func (e *Engine) ApplyAction(ctx context.Context, match *model.Match, players []
 	}
 }
 
+func (e *Engine) ApplyTurnTimeout(ctx context.Context, match *model.Match, players []model.MatchPlayer) (gameService.ApplyActionResult, error) {
+	_ = ctx
+
+	var state carcassonneDTO.GameState
+	if err := json.Unmarshal(match.GameState, &state); err != nil {
+		return gameService.ApplyActionResult{}, gameService.ErrInvalidMatchAction
+	}
+
+	if state.Phase != carcassonneDTO.PhasePlaceTile && state.Phase != carcassonneDTO.PhasePlaceMeeple {
+		return gameService.ApplyActionResult{}, gameService.ErrInvalidMatchAction
+	}
+	if state.CurrentPlayerID == "" {
+		return gameService.ApplyActionResult{}, gameService.ErrInvalidMatchAction
+	}
+	if !slices.ContainsFunc(players, func(player model.MatchPlayer) bool {
+		return player.ActorID == state.CurrentPlayerID
+	}) {
+		return gameService.ApplyActionResult{}, gameService.ErrInvalidMatchAction
+	}
+
+	switch state.Phase {
+	case carcassonneDTO.PhasePlaceTile:
+		placement, ok := e.firstValidTilePlacement(state)
+		if !ok {
+			return gameService.ApplyActionResult{}, gameService.ErrInvalidMatchAction
+		}
+		payload, err := marshalActionPayload(carcassonneDTO.PlaceTilePayload{
+			RoomID:   match.RoomID,
+			X:        placement.X,
+			Y:        placement.Y,
+			Rotation: placement.Rotation,
+		})
+		if err != nil {
+			return gameService.ApplyActionResult{}, err
+		}
+		return e.placeTile(match, &state, gameService.ApplyActionRequest{
+			ActorID: state.CurrentPlayerID,
+			Action:  string(carcassonneDTO.ActionPlaceTile),
+			Payload: payload,
+		})
+	case carcassonneDTO.PhasePlaceMeeple:
+		payload, err := marshalActionPayload(carcassonneDTO.SkipMeeplePayload{
+			RoomID: match.RoomID,
+		})
+		if err != nil {
+			return gameService.ApplyActionResult{}, err
+		}
+		return e.skipMeeple(match, &state, gameService.ApplyActionRequest{
+			ActorID: state.CurrentPlayerID,
+			Action:  string(carcassonneDTO.ActionSkipMeeple),
+			Payload: payload,
+		})
+	default:
+		return gameService.ApplyActionResult{}, gameService.ErrInvalidMatchAction
+	}
+}
+
 func (e *Engine) placeTile(match *model.Match, state *carcassonneDTO.GameState, req gameService.ApplyActionRequest) (gameService.ApplyActionResult, error) {
 	if state.Phase != carcassonneDTO.PhasePlaceTile || state.CurrentTile == nil {
 		return gameService.ApplyActionResult{}, gameService.ErrInvalidMatchAction
@@ -79,6 +136,33 @@ func (e *Engine) placeTile(match *model.Match, state *carcassonneDTO.GameState, 
 	return marshalActionResult(*state, model.MatchStatusActive, nil)
 }
 
+type autoTilePlacement struct {
+	X        int
+	Y        int
+	Rotation int
+}
+
+func (e *Engine) firstValidTilePlacement(state carcassonneDTO.GameState) (autoTilePlacement, bool) {
+	placements := e.validTilePlacements(state)
+	if len(placements) == 0 || len(placements[0].Rotations) == 0 {
+		return autoTilePlacement{}, false
+	}
+
+	return autoTilePlacement{
+		X:        placements[0].X,
+		Y:        placements[0].Y,
+		Rotation: placements[0].Rotations[0],
+	}, true
+}
+
+func marshalActionPayload(payload any) (json.RawMessage, error) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	return data, nil
+}
+
 func (e *Engine) placeMeeple(match *model.Match, state *carcassonneDTO.GameState, req gameService.ApplyActionRequest) (gameService.ApplyActionResult, error) {
 	if state.Phase != carcassonneDTO.PhasePlaceMeeple || state.LastPlacedTile == nil {
 		return gameService.ApplyActionResult{}, gameService.ErrInvalidMatchAction
@@ -96,10 +180,20 @@ func (e *Engine) placeMeeple(match *model.Match, state *carcassonneDTO.GameState
 		return gameService.ApplyActionResult{}, gameService.ErrInvalidMatchAction
 	}
 
+	def, ok := e.catalog.Get(state.LastPlacedTile.TileID)
+	if !ok {
+		return gameService.ApplyActionResult{}, gameService.ErrInvalidMatchAction
+	}
+	zone, ok := findZone(def, payload.ZoneID)
+	if !ok {
+		return gameService.ApplyActionResult{}, gameService.ErrInvalidMatchAction
+	}
+
 	state.Meeples = append(state.Meeples, carcassonneDTO.PlacedMeeple{
 		TileInstanceID: state.LastPlacedTile.InstanceID,
 		ZoneID:         payload.ZoneID,
 		ActorID:        req.ActorID,
+		FeatureType:    zone.Type,
 	})
 	for i := range state.Players {
 		if state.Players[i].ActorID == req.ActorID {

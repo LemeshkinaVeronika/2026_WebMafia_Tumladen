@@ -51,6 +51,15 @@ func (f *Facade) ApplyAction(ctx context.Context, match *model.Match, players []
 	return engine.ApplyAction(ctx, match, players, req)
 }
 
+func (f *Facade) ApplyTurnTimeout(ctx context.Context, match *model.Match, players []model.MatchPlayer) (ApplyActionResult, error) {
+	engine, err := f.registry.Get(match.GameType)
+	if err != nil {
+		return ApplyActionResult{}, err
+	}
+
+	return engine.ApplyTurnTimeout(ctx, match, players)
+}
+
 func (f *Facade) BuildPublicState(match *model.Match, players []model.MatchPlayer) (json.RawMessage, error) {
 	engine, err := f.registry.Get(match.GameType)
 	if err != nil {

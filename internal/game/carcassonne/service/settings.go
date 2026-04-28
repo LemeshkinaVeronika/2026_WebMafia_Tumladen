@@ -31,7 +31,7 @@ func (e *Engine) NormalizeRoomSettings(raw json.RawMessage) (model.JSONB, error)
 		}
 	}
 
-	if settings.TurnTimeSeconds < minTurnTimeSeconds || settings.TurnTimeSeconds > maxTurnTimeSeconds {
+	if settings.TurnTimeSeconds != 0 && (settings.TurnTimeSeconds < minTurnTimeSeconds || settings.TurnTimeSeconds > maxTurnTimeSeconds) {
 		return nil, gameService.ErrInvalidRoomSettings
 	}
 

@@ -16,6 +16,7 @@ type Engine interface {
 	BuildInitialMatch(room *model.Room, participants []model.RoomParticipant) (*model.Match, []model.MatchPlayer, error)
 
 	ApplyAction(ctx context.Context, match *model.Match, players []model.MatchPlayer, req ApplyActionRequest) (ApplyActionResult, error)
+	ApplyTurnTimeout(ctx context.Context, match *model.Match, players []model.MatchPlayer) (ApplyActionResult, error)
 	BuildPublicState(match *model.Match, players []model.MatchPlayer) (json.RawMessage, error)
 	BuildPrivateState(match *model.Match, players []model.MatchPlayer, actorID string) (json.RawMessage, error)
 }

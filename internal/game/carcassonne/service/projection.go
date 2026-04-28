@@ -55,7 +55,7 @@ func (e *Engine) BuildPublicState(match *model.Match, _ []model.MatchPlayer) (js
 		Board: carcassonneDTO.BoardState{
 			Tiles: state.Board,
 		},
-		Meeples:  state.Meeples,
+		Meeples:  e.publicMeeples(state),
 		Settings: state.Settings,
 		Result:   result,
 	}
@@ -66,6 +66,33 @@ func (e *Engine) BuildPublicState(match *model.Match, _ []model.MatchPlayer) (js
 	}
 
 	return data, nil
+}
+
+func (e *Engine) publicMeeples(state carcassonneDTO.GameState) []carcassonneDTO.PlacedMeeple {
+	meeples := make([]carcassonneDTO.PlacedMeeple, 0, len(state.Meeples))
+	for _, meeple := range state.Meeples {
+		if meeple.FeatureType == "" {
+			meeple.FeatureType = e.meepleFeatureType(state, meeple)
+		}
+		meeples = append(meeples, meeple)
+	}
+	return meeples
+}
+
+func (e *Engine) meepleFeatureType(state carcassonneDTO.GameState, meeple carcassonneDTO.PlacedMeeple) carcassonneDTO.ZoneType {
+	tile := placedTileByInstanceID(state.Board, meeple.TileInstanceID)
+	if tile == nil {
+		return ""
+	}
+	def, ok := e.catalog.Get(tile.TileID)
+	if !ok {
+		return ""
+	}
+	zone, ok := findZone(def, meeple.ZoneID)
+	if !ok {
+		return ""
+	}
+	return zone.Type
 }
 
 func publicMatchResult(match *model.Match) (*carcassonneDTO.MatchResult, error) {
@@ -212,9 +239,14 @@ func (e *Engine) validMeeplePlacements(state carcassonneDTO.GameState, actorID s
 	placements := make([]carcassonneDTO.ValidMeeplePlacement, 0, len(def.Zones))
 	for _, zone := range def.Zones {
 		if e.canPlaceMeeple(state, actorID, zone.ZoneID) {
+			segment := carcassonneDTO.ZoneSegment("")
+			if len(zone.Segments) > 0 {
+				segment = zone.Segments[0]
+			}
 			placements = append(placements, carcassonneDTO.ValidMeeplePlacement{
 				ZoneID:      zone.ZoneID,
 				FeatureType: zone.Type,
+				Segment:     segment,
 			})
 		}
 	}

@@ -38,6 +38,7 @@ type Handler struct {
 	games             *gameService.Facade
 	node              *centrifuge.Node
 	registry          *Registry
+	turnTimers        *turnTimerManager
 	logger            logger.Logger
 	websocketHandler  http.Handler
 	httpStreamHandler http.Handler
@@ -51,6 +52,7 @@ type MessageHandler struct {
 	games        *gameService.Facade
 	node         *centrifuge.Node
 	registry     *Registry
+	turnTimers   *turnTimerManager
 	logger       logger.Logger
 }
 
@@ -95,6 +97,25 @@ func NewHandler(
 		registry:      NewRegistry(),
 		logger:        logger,
 	}
+	h.turnTimers = newTurnTimerManager(matchService, logger)
+	h.turnTimers.SetApplyCallback(func(ctx context.Context, roomID string, matchState *matchDTO.MatchResponse) {
+		messageHandler := &MessageHandler{
+			roomService:  h.roomService,
+			matchService: h.matchService,
+			games:        h.games,
+			node:         h.node,
+			registry:     h.registry,
+			turnTimers:   h.turnTimers,
+			logger:       h.logger,
+		}
+		messageHandler.broadcastMatchState(ctx, roomID, matchState)
+		if matchState.Status == string(model.MatchStatusFinished) {
+			h.turnTimers.Stop(roomID)
+			messageHandler.broadcastMatchFinished(ctx, roomID)
+			return
+		}
+		h.turnTimers.Schedule(matchState)
+	})
 
 	h.node.OnConnecting(h.onConnecting)
 	h.node.OnConnect(h.onConnect)
@@ -124,6 +145,7 @@ func (h *Handler) Run() error {
 }
 
 func (h *Handler) Shutdown(ctx context.Context) error {
+	h.turnTimers.StopAll()
 	return h.node.Shutdown(ctx)
 }
 
@@ -222,6 +244,7 @@ func (h *Handler) onConnect(client *centrifuge.Client) {
 		games:        h.games,
 		node:         h.node,
 		registry:     h.registry,
+		turnTimers:   h.turnTimers,
 		logger:       h.logger,
 	}
 
@@ -622,14 +645,18 @@ func (h *MessageHandler) handleStartRoom(ctx context.Context, state *ConnectionS
 
 	if matchState.Status == string(model.MatchStatusFinished) {
 		h.broadcastMatchState(ctx, p.RoomID, matchState)
+		h.turnTimers.Stop(p.RoomID)
 		h.broadcastMatchFinished(ctx, p.RoomID)
 		return
 	}
 
 	h.broadcastMatchState(ctx, p.RoomID, matchState)
 	if matchState.Status == string(model.MatchStatusFinished) {
+		h.turnTimers.Stop(p.RoomID)
 		h.broadcastMatchFinished(ctx, p.RoomID)
+		return
 	}
+	h.turnTimers.Schedule(matchState)
 }
 
 func (h *MessageHandler) broadcastRoomState(ctx context.Context, roomID string, roomState any) {
@@ -682,6 +709,7 @@ func (h *MessageHandler) sendActiveMatchStateIfExists(ctx context.Context, state
 		return
 	}
 
+	h.turnTimers.Schedule(matchState)
 	h.sendMatchState(state, matchState)
 }
 
@@ -775,8 +803,11 @@ func (h *MessageHandler) handleMatchAction(ctx context.Context, state *Connectio
 
 	h.broadcastMatchState(ctx, p.RoomID, matchState)
 	if matchState.Status == string(model.MatchStatusFinished) {
+		h.turnTimers.Stop(p.RoomID)
 		h.broadcastMatchFinished(ctx, p.RoomID)
+		return
 	}
+	h.turnTimers.Schedule(matchState)
 }
 
 func marshalRawMessage(v any) json.RawMessage {
@@ -829,6 +860,7 @@ func (h *MessageHandler) handleLeaveMatch(ctx context.Context, state *Connection
 		return
 	}
 
+	h.turnTimers.Stop(p.RoomID)
 	h.broadcastMatchFinished(ctx, p.RoomID)
 	h.disconnectLocalActorConnections(p.RoomID, state.Actor.ID)
 }
@@ -864,6 +896,7 @@ func (h *MessageHandler) handleDeleteRoom(ctx context.Context, state *Connection
 
 	if roomState.Status == string(model.RoomStatusPlaying) {
 		if err := h.roomService.TerminateRoomMatch(ctx, p.RoomID, model.MatchTerminationReasonRoomDeleted); err == nil {
+			h.turnTimers.Stop(p.RoomID)
 			h.broadcastMatchFinished(ctx, p.RoomID)
 		}
 	}

@@ -169,6 +169,162 @@ func TestApplyActionRejectsInvalidTurnAndPlacements(t *testing.T) {
 	}
 }
 
+func TestApplyActionStoresMeepleFeatureType(t *testing.T) {
+	engine := testEngine(t)
+
+	lastPlacedTile := carcassonneDTO.PlacedTile{
+		InstanceID: "drawn-tile",
+		TileID:     "road_straight",
+		X:          0,
+		Y:          -1,
+		Rotation:   0,
+		PlacedBy:   "actor-a",
+		TurnNumber: 1,
+	}
+	state := carcassonneDTO.GameState{
+		Version:         1,
+		Phase:           carcassonneDTO.PhasePlaceMeeple,
+		TurnNumber:      1,
+		CurrentPlayerID: "actor-a",
+		Players: []carcassonneDTO.PlayerState{
+			{ActorID: "actor-a", MeeplesLeft: 7},
+			{ActorID: "actor-b", MeeplesLeft: 7},
+		},
+		Board: []carcassonneDTO.PlacedTile{
+			lastPlacedTile,
+		},
+		LastPlacedTile: &lastPlacedTile,
+		DeckRemaining: []carcassonneDTO.TileInstance{
+			{InstanceID: "next-tile", TileID: "city_cap"},
+		},
+		Meeples: []carcassonneDTO.PlacedMeeple{},
+	}
+	match := matchFromGameState(t, state)
+	players := []model.MatchPlayer{
+		{MatchID: match.ID, ActorID: "actor-a"},
+		{MatchID: match.ID, ActorID: "actor-b"},
+	}
+
+	result, err := engine.ApplyAction(t.Context(), match, players, gameService.ApplyActionRequest{
+		ActorID: "actor-a",
+		Action:  string(carcassonneDTO.ActionPlaceMeeple),
+		Payload: marshalPayload(t, carcassonneDTO.PlaceMeeplePayload{RoomID: match.RoomID, ZoneID: "road_1"}),
+	})
+	if err != nil {
+		t.Fatalf("place meeple: %v", err)
+	}
+
+	var after carcassonneDTO.GameState
+	unmarshalGameState(t, result.NextState, &after)
+	if got, want := len(after.Meeples), 1; got != want {
+		t.Fatalf("meeples after place = %d, want %d", got, want)
+	}
+	if got, want := after.Meeples[0].FeatureType, carcassonneDTO.ZoneTypeRoad; got != want {
+		t.Fatalf("meeple featureType = %s, want %s", got, want)
+	}
+}
+
+func TestApplyTurnTimeoutPlacesFirstValidTile(t *testing.T) {
+	engine := testEngine(t)
+
+	state := carcassonneDTO.GameState{
+		Version:         1,
+		Phase:           carcassonneDTO.PhasePlaceTile,
+		TurnNumber:      1,
+		CurrentPlayerID: "actor-a",
+		Players: []carcassonneDTO.PlayerState{
+			{ActorID: "actor-a", MeeplesLeft: 7},
+			{ActorID: "actor-b", MeeplesLeft: 7},
+		},
+		Board: []carcassonneDTO.PlacedTile{
+			{InstanceID: "start", TileID: "start_tile", X: 0, Y: 0, Rotation: 0},
+		},
+		CurrentTile: &carcassonneDTO.TileInstance{InstanceID: "drawn-tile", TileID: "city_cap"},
+		Meeples:     []carcassonneDTO.PlacedMeeple{},
+	}
+	match := matchFromGameState(t, state)
+	players := []model.MatchPlayer{
+		{MatchID: match.ID, ActorID: "actor-a"},
+		{MatchID: match.ID, ActorID: "actor-b"},
+	}
+
+	privateBefore := privateStateForActor(t, engine, match, players, "actor-a")
+	wantPlacement := privateBefore.ValidPlacements[0]
+	wantRotation := wantPlacement.Rotations[0]
+
+	result, err := engine.ApplyTurnTimeout(t.Context(), match, players)
+	if err != nil {
+		t.Fatalf("ApplyTurnTimeout() error = %v", err)
+	}
+
+	var after carcassonneDTO.GameState
+	unmarshalGameState(t, result.NextState, &after)
+	if after.Phase != carcassonneDTO.PhasePlaceMeeple {
+		t.Fatalf("phase after timeout = %s, want %s", after.Phase, carcassonneDTO.PhasePlaceMeeple)
+	}
+	if after.LastPlacedTile == nil {
+		t.Fatalf("lastPlacedTile after timeout = nil, want placed tile")
+	}
+	if after.LastPlacedTile.X != wantPlacement.X || after.LastPlacedTile.Y != wantPlacement.Y || after.LastPlacedTile.Rotation != wantRotation {
+		t.Fatalf("placed tile = %#v, want x=%d y=%d rotation=%d", after.LastPlacedTile, wantPlacement.X, wantPlacement.Y, wantRotation)
+	}
+}
+
+func TestApplyTurnTimeoutSkipsMeeple(t *testing.T) {
+	engine := testEngine(t)
+
+	lastPlaced := carcassonneDTO.PlacedTile{
+		InstanceID: "drawn-tile",
+		TileID:     "city_cap",
+		X:          1,
+		Y:          0,
+		Rotation:   0,
+		PlacedBy:   "actor-a",
+		TurnNumber: 1,
+	}
+	state := carcassonneDTO.GameState{
+		Version:         1,
+		Phase:           carcassonneDTO.PhasePlaceMeeple,
+		TurnNumber:      1,
+		CurrentPlayerID: "actor-a",
+		Players: []carcassonneDTO.PlayerState{
+			{ActorID: "actor-a", MeeplesLeft: 7},
+			{ActorID: "actor-b", MeeplesLeft: 7},
+		},
+		Board: []carcassonneDTO.PlacedTile{
+			{InstanceID: "start", TileID: "start_tile", X: 0, Y: 0, Rotation: 0},
+			lastPlaced,
+		},
+		DeckRemaining: []carcassonneDTO.TileInstance{
+			{InstanceID: "next-tile", TileID: "road_straight"},
+		},
+		LastPlacedTile: &lastPlaced,
+		Meeples:        []carcassonneDTO.PlacedMeeple{},
+	}
+	match := matchFromGameState(t, state)
+	players := []model.MatchPlayer{
+		{MatchID: match.ID, ActorID: "actor-a"},
+		{MatchID: match.ID, ActorID: "actor-b"},
+	}
+
+	result, err := engine.ApplyTurnTimeout(t.Context(), match, players)
+	if err != nil {
+		t.Fatalf("ApplyTurnTimeout() error = %v", err)
+	}
+
+	var after carcassonneDTO.GameState
+	unmarshalGameState(t, result.NextState, &after)
+	if after.Phase != carcassonneDTO.PhasePlaceTile {
+		t.Fatalf("phase after timeout = %s, want %s", after.Phase, carcassonneDTO.PhasePlaceTile)
+	}
+	if after.CurrentPlayerID != "actor-b" {
+		t.Fatalf("currentPlayerID after timeout = %s, want actor-b", after.CurrentPlayerID)
+	}
+	if len(after.Meeples) != 0 {
+		t.Fatalf("meeples after timeout = %d, want 0", len(after.Meeples))
+	}
+}
+
 func matchFromGameState(t *testing.T, state carcassonneDTO.GameState) *model.Match {
 	t.Helper()
 

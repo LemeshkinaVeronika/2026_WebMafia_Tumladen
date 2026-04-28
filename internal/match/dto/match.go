@@ -31,3 +31,12 @@ type ApplyMatchActionRequest struct {
 	Action  string          `json:"action"`
 	Payload json.RawMessage `json:"payload"`
 }
+
+type ApplyTurnTimeoutRequest struct {
+	RoomID               string `json:"roomId"`
+	ExpectedMatchID      string `json:"expectedMatchId"`
+	ExpectedActorID      string `json:"expectedActorId"`
+	ExpectedPhase        string `json:"expectedPhase"`
+	ExpectedTurnNumber   int    `json:"expectedTurnNumber"`
+	ExpectedStateVersion int    `json:"expectedStateVersion"`
+}

@@ -123,6 +123,84 @@ func (s *Service) ApplyAction(ctx context.Context, req dto.ApplyMatchActionReque
 	return &resp, nil
 }
 
+func (s *Service) ApplyTurnTimeout(ctx context.Context, req dto.ApplyTurnTimeoutRequest) (*dto.MatchResponse, error) {
+	unlock := s.roomLocks.Lock(req.RoomID)
+	defer unlock()
+
+	match, players, err := s.repo.GetActiveByRoomID(ctx, req.RoomID)
+	if err != nil {
+		if errors.Is(err, matchPostgres.ErrNotFound) {
+			return nil, ErrMatchNotFound
+		}
+		return nil, err
+	}
+
+	if match.Status != model.MatchStatusActive {
+		return nil, ErrMatchNotActive
+	}
+	if !matchesExpectedTimeoutState(match, req) {
+		return nil, ErrInvalidMatchAction
+	}
+
+	actionResult, err := s.games.ApplyTurnTimeout(ctx, match, players)
+	if err != nil {
+		return nil, mapGameMatchError(err)
+	}
+
+	if actionResult.NextStatus == model.MatchStatusFinished {
+		if s.terminator == nil {
+			return nil, ErrInvalidMatchAction
+		}
+
+		if err := s.terminator.FinishRoomMatch(ctx, roomDTO.FinishRoomMatchRequest{
+			ActorID:   &req.ExpectedActorID,
+			RoomID:    req.RoomID,
+			Reason:    string(model.MatchTerminationReasonNormalCompletion),
+			GameState: json.RawMessage(actionResult.NextState),
+			Result:    json.RawMessage(resultOrNull(actionResult.Result)),
+		}); err != nil {
+			return nil, err
+		}
+
+		return s.GetLastByRoomID(ctx, req.RoomID)
+	}
+
+	if err := s.repo.UpdateState(ctx, match.ID, actionResult.NextState, actionResult.NextStatus, actionResult.Result); err != nil {
+		if errors.Is(err, matchPostgres.ErrNotFound) {
+			return nil, ErrMatchNotFound
+		}
+		return nil, err
+	}
+
+	match.GameState = actionResult.NextState
+	match.Status = actionResult.NextStatus
+	match.Result = actionResult.Result
+
+	resp := matchToResponse(*match, players)
+	return &resp, nil
+}
+
+func matchesExpectedTimeoutState(match *model.Match, req dto.ApplyTurnTimeoutRequest) bool {
+	if match.ID != req.ExpectedMatchID {
+		return false
+	}
+
+	var state struct {
+		Version         int    `json:"version"`
+		Phase           string `json:"phase"`
+		TurnNumber      int    `json:"turnNumber"`
+		CurrentPlayerID string `json:"currentPlayerId"`
+	}
+	if err := json.Unmarshal(match.GameState, &state); err != nil {
+		return false
+	}
+
+	return state.Version == req.ExpectedStateVersion &&
+		state.Phase == req.ExpectedPhase &&
+		state.TurnNumber == req.ExpectedTurnNumber &&
+		state.CurrentPlayerID == req.ExpectedActorID
+}
+
 func resultOrNull(result *model.JSONB) []byte {
 	if result == nil {
 		return []byte(`null`)

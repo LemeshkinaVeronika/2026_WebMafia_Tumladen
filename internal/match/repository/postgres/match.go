@@ -209,7 +209,7 @@ func (r *Repository) UpdateState(ctx context.Context, matchID string, state mode
 		    status = $3,
 		    result = $4,
 		    updated_at = NOW()
-		WHERE id = $1
+		WHERE id = $1 AND status = 'active'
 	`
 
 	res, err := r.db.ExecContext(ctx, query, matchID, state, status, result)
