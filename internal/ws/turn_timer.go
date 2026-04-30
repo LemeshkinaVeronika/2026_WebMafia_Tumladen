@@ -56,7 +56,11 @@ func (m *turnTimerManager) Schedule(matchState *matchDTO.MatchResponse) {
 		return
 	}
 
-	duration := time.Duration(snapshot.Settings.TurnTimeSeconds) * time.Second
+	deadline := turnDeadline(matchState.UpdatedAt, snapshot.Settings.TurnTimeSeconds)
+	duration := time.Until(deadline)
+	if duration < 0 {
+		duration = 0
+	}
 	req := matchDTO.ApplyTurnTimeoutRequest{
 		RoomID:               matchState.RoomID,
 		ExpectedMatchID:      matchState.ID,
@@ -139,4 +143,13 @@ func timeoutSnapshot(matchState *matchDTO.MatchResponse) (turnTimerSnapshot, boo
 		return snapshot, false
 	}
 	return snapshot, true
+}
+
+func turnDeadline(updatedAt string, turnTimeSeconds int) time.Time {
+	duration := time.Duration(turnTimeSeconds) * time.Second
+	updated, err := time.Parse(time.RFC3339, updatedAt)
+	if err != nil || updated.IsZero() {
+		return time.Now().Add(duration)
+	}
+	return updated.Add(duration)
 }

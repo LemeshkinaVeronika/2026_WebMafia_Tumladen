@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	carcassonneDTO "github.com/webmafia/tumladan/internal/game/carcassonne/dto"
 	"github.com/webmafia/tumladan/internal/model"
@@ -10,6 +11,7 @@ import (
 
 func TestBuildPublicStateExposesExplicitTurnDeckAndBoard(t *testing.T) {
 	engine := testEngine(t)
+	updatedAt := time.Date(2026, 4, 30, 10, 0, 0, 0, time.UTC)
 
 	state := carcassonneDTO.GameState{
 		Version:         1,
@@ -35,6 +37,9 @@ func TestBuildPublicStateExposesExplicitTurnDeckAndBoard(t *testing.T) {
 		DeckRemaining: []carcassonneDTO.TileInstance{
 			{InstanceID: "next", TileID: "monastery"},
 		},
+		Settings: carcassonneDTO.MatchSettings{
+			TurnTimeSeconds: 120,
+		},
 		Meeples: []carcassonneDTO.PlacedMeeple{
 			{TileInstanceID: "placed", ZoneID: "city_1", ActorID: "actor-a"},
 		},
@@ -45,7 +50,7 @@ func TestBuildPublicStateExposesExplicitTurnDeckAndBoard(t *testing.T) {
 		t.Fatalf("marshal state: %v", err)
 	}
 
-	rawPublic, err := engine.BuildPublicState(&model.Match{GameState: model.JSONB(rawState)}, nil)
+	rawPublic, err := engine.BuildPublicState(&model.Match{GameState: model.JSONB(rawState), UpdatedAt: updatedAt}, nil)
 	if err != nil {
 		t.Fatalf("BuildPublicState() error = %v", err)
 	}
@@ -66,6 +71,9 @@ func TestBuildPublicStateExposesExplicitTurnDeckAndBoard(t *testing.T) {
 	}
 	if !publicState.CurrentTurn.MeeplePlaced {
 		t.Fatal("meeplePlaced = false, want true")
+	}
+	if publicState.CurrentTurn.TurnEndsAt == nil || *publicState.CurrentTurn.TurnEndsAt != "2026-04-30T10:02:00Z" {
+		t.Fatalf("turnEndsAt = %v, want 2026-04-30T10:02:00Z", publicState.CurrentTurn.TurnEndsAt)
 	}
 	if got, want := publicState.Deck.RemainingCount, 1; got != want {
 		t.Fatalf("remainingCount = %d, want %d", got, want)

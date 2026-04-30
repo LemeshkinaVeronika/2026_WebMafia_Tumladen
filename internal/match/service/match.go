@@ -115,12 +115,7 @@ func (s *Service) ApplyAction(ctx context.Context, req dto.ApplyMatchActionReque
 		return nil, err
 	}
 
-	match.GameState = actionResult.NextState
-	match.Status = actionResult.NextStatus
-	match.Result = actionResult.Result
-
-	resp := matchToResponse(*match, players)
-	return &resp, nil
+	return s.GetActiveByRoomID(ctx, req.RoomID)
 }
 
 func (s *Service) ApplyTurnTimeout(ctx context.Context, req dto.ApplyTurnTimeoutRequest) (*dto.MatchResponse, error) {
@@ -172,12 +167,7 @@ func (s *Service) ApplyTurnTimeout(ctx context.Context, req dto.ApplyTurnTimeout
 		return nil, err
 	}
 
-	match.GameState = actionResult.NextState
-	match.Status = actionResult.NextStatus
-	match.Result = actionResult.Result
-
-	resp := matchToResponse(*match, players)
-	return &resp, nil
+	return s.GetActiveByRoomID(ctx, req.RoomID)
 }
 
 func matchesExpectedTimeoutState(match *model.Match, req dto.ApplyTurnTimeoutRequest) bool {

@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"slices"
+	"time"
 
 	gameService "github.com/webmafia/tumladan/internal/game/service"
 
@@ -48,6 +49,7 @@ func (e *Engine) BuildPublicState(match *model.Match, _ []model.MatchPlayer) (js
 			DrawnTile:    drawnTile,
 			PlacedTile:   state.LastPlacedTile,
 			MeeplePlaced: meeplePlacedOnLastTile(state),
+			TurnEndsAt:   turnEndsAtView(match.UpdatedAt, state),
 		},
 		Deck: carcassonneDTO.DeckState{
 			RemainingCount: len(state.DeckRemaining),
@@ -66,6 +68,15 @@ func (e *Engine) BuildPublicState(match *model.Match, _ []model.MatchPlayer) (js
 	}
 
 	return data, nil
+}
+
+func turnEndsAtView(turnStartedAt time.Time, state carcassonneDTO.GameState) *string {
+	if turnStartedAt.IsZero() || state.Settings.TurnTimeSeconds <= 0 || state.Phase == carcassonneDTO.PhaseFinished || state.CurrentPlayerID == "" {
+		return nil
+	}
+
+	turnEndsAt := turnStartedAt.Add(time.Duration(state.Settings.TurnTimeSeconds) * time.Second).Format(time.RFC3339)
+	return &turnEndsAt
 }
 
 func (e *Engine) publicMeeples(state carcassonneDTO.GameState) []carcassonneDTO.PlacedMeeple {

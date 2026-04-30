@@ -1207,6 +1207,7 @@ func matchFinishedResultPayload(matchState *matchDTO.MatchResponse, result json.
 
 	payload["matchId"] = matchState.ID
 	payload["roomId"] = matchState.RoomID
+	addMatchTerminationMetadata(payload, matchState)
 	return payload
 }
 
@@ -1225,6 +1226,15 @@ func terminatedMatchFinishedPayload(matchState *matchDTO.MatchResponse) map[stri
 
 	payload["matchId"] = matchState.ID
 	payload["roomId"] = matchState.RoomID
+	addMatchTerminationMetadata(payload, matchState)
+
+	return payload
+}
+
+func addMatchTerminationMetadata(payload map[string]any, matchState *matchDTO.MatchResponse) {
+	if matchState == nil {
+		return
+	}
 	if matchState.TerminationReason != nil {
 		payload["terminationReason"] = *matchState.TerminationReason
 	}
@@ -1234,8 +1244,6 @@ func terminatedMatchFinishedPayload(matchState *matchDTO.MatchResponse) map[stri
 	if matchState.TerminatedAt != nil {
 		payload["terminatedAt"] = *matchState.TerminatedAt
 	}
-
-	return payload
 }
 
 func (h *Handler) NotifyMatchFinished(ctx context.Context, roomID string) {

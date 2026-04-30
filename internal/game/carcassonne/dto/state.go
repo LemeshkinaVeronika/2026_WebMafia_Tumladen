@@ -72,6 +72,7 @@ type CurrentTurnState struct {
 	DrawnTile    *TileView   `json:"drawnTile"`
 	PlacedTile   *PlacedTile `json:"placedTile"`
 	MeeplePlaced bool        `json:"meeplePlaced"`
+	TurnEndsAt   *string     `json:"turnEndsAt,omitempty"`
 }
 
 type DeckState struct {
