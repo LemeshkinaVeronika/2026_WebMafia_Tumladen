@@ -15,16 +15,29 @@ import (
 
 type turnTimerManager struct {
 	mu      sync.Mutex
-	timers  map[string]*time.Timer
+	timers  map[string]*turnTimerEntry
 	service *matchService.Service
 	logger  logger.Logger
 	onApply func(context.Context, string, *matchDTO.MatchResponse)
+}
+
+type turnTimerEntry struct {
+	timer    *time.Timer
+	deadline time.Time
+	key      turnTimerKey
+}
+
+type turnTimerKey struct {
+	MatchID         string
+	TurnNumber      int
+	CurrentPlayerID string
 }
 
 type turnTimerSnapshot struct {
 	Version         int    `json:"version"`
 	Phase           string `json:"phase"`
 	TurnNumber      int    `json:"turnNumber"`
+	TurnStartedAt   string `json:"turnStartedAt"`
 	CurrentPlayerID string `json:"currentPlayerId"`
 	Settings        struct {
 		TurnTimeSeconds int `json:"turnTimeSeconds"`
@@ -33,7 +46,7 @@ type turnTimerSnapshot struct {
 
 func newTurnTimerManager(service *matchService.Service, logger logger.Logger) *turnTimerManager {
 	return &turnTimerManager{
-		timers:  make(map[string]*time.Timer),
+		timers:  make(map[string]*turnTimerEntry),
 		service: service,
 		logger:  logger,
 	}
@@ -56,11 +69,12 @@ func (m *turnTimerManager) Schedule(matchState *matchDTO.MatchResponse) {
 		return
 	}
 
-	deadline := turnDeadline(matchState.UpdatedAt, snapshot.Settings.TurnTimeSeconds)
-	duration := time.Until(deadline)
-	if duration < 0 {
-		duration = 0
+	key := turnTimerKey{
+		MatchID:         matchState.ID,
+		TurnNumber:      snapshot.TurnNumber,
+		CurrentPlayerID: snapshot.CurrentPlayerID,
 	}
+	deadline := turnDeadline(turnStartedAt(matchState.UpdatedAt, snapshot), snapshot.Settings.TurnTimeSeconds)
 	req := matchDTO.ApplyTurnTimeoutRequest{
 		RoomID:               matchState.RoomID,
 		ExpectedMatchID:      matchState.ID,
@@ -72,9 +86,20 @@ func (m *turnTimerManager) Schedule(matchState *matchDTO.MatchResponse) {
 
 	m.mu.Lock()
 	if existing := m.timers[matchState.RoomID]; existing != nil {
-		existing.Stop()
+		if existing.key == key {
+			deadline = existing.deadline
+		}
+		existing.timer.Stop()
 	}
-	m.timers[matchState.RoomID] = time.AfterFunc(duration, func() {
+	duration := time.Until(deadline)
+	if duration < 0 {
+		duration = 0
+	}
+	m.timers[matchState.RoomID] = &turnTimerEntry{
+		deadline: deadline,
+		key:      key,
+	}
+	m.timers[matchState.RoomID].timer = time.AfterFunc(duration, func() {
 		m.applyTimeout(req)
 	})
 	m.mu.Unlock()
@@ -86,8 +111,8 @@ func (m *turnTimerManager) Stop(roomID string) {
 	}
 
 	m.mu.Lock()
-	if timer := m.timers[roomID]; timer != nil {
-		timer.Stop()
+	if entry := m.timers[roomID]; entry != nil {
+		entry.timer.Stop()
 	}
 	delete(m.timers, roomID)
 	m.mu.Unlock()
@@ -99,8 +124,8 @@ func (m *turnTimerManager) StopAll() {
 	}
 
 	m.mu.Lock()
-	for roomID, timer := range m.timers {
-		timer.Stop()
+	for roomID, entry := range m.timers {
+		entry.timer.Stop()
 		delete(m.timers, roomID)
 	}
 	m.mu.Unlock()
@@ -152,4 +177,11 @@ func turnDeadline(updatedAt string, turnTimeSeconds int) time.Time {
 		return time.Now().Add(duration)
 	}
 	return updated.Add(duration)
+}
+
+func turnStartedAt(fallback string, snapshot turnTimerSnapshot) string {
+	if snapshot.TurnStartedAt != "" {
+		return snapshot.TurnStartedAt
+	}
+	return fallback
 }

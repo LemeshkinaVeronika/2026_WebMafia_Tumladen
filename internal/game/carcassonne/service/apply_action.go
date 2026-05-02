@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"math/rand"
 	"slices"
+	"time"
 
 	carcassonneDTO "github.com/webmafia/tumladan/internal/game/carcassonne/dto"
 	gameService "github.com/webmafia/tumladan/internal/game/service"
@@ -64,7 +66,7 @@ func (e *Engine) ApplyTurnTimeout(ctx context.Context, match *model.Match, playe
 
 	switch state.Phase {
 	case carcassonneDTO.PhasePlaceTile:
-		placement, ok := e.firstValidTilePlacement(state)
+		placement, ok := e.randomValidTilePlacement(state)
 		if !ok {
 			return gameService.ApplyActionResult{}, gameService.ErrInvalidMatchAction
 		}
@@ -77,11 +79,14 @@ func (e *Engine) ApplyTurnTimeout(ctx context.Context, match *model.Match, playe
 		if err != nil {
 			return gameService.ApplyActionResult{}, err
 		}
-		return e.placeTile(match, &state, gameService.ApplyActionRequest{
+		if _, err := e.placeTile(match, &state, gameService.ApplyActionRequest{
 			ActorID: state.CurrentPlayerID,
 			Action:  string(carcassonneDTO.ActionPlaceTile),
 			Payload: payload,
-		})
+		}); err != nil {
+			return gameService.ApplyActionResult{}, err
+		}
+		return e.resolveTurn(&state)
 	case carcassonneDTO.PhasePlaceMeeple:
 		payload, err := marshalActionPayload(carcassonneDTO.SkipMeeplePayload{
 			RoomID: match.RoomID,
@@ -142,17 +147,24 @@ type autoTilePlacement struct {
 	Rotation int
 }
 
-func (e *Engine) firstValidTilePlacement(state carcassonneDTO.GameState) (autoTilePlacement, bool) {
+func (e *Engine) randomValidTilePlacement(state carcassonneDTO.GameState) (autoTilePlacement, bool) {
 	placements := e.validTilePlacements(state)
-	if len(placements) == 0 || len(placements[0].Rotations) == 0 {
+	options := make([]autoTilePlacement, 0, len(placements))
+	for _, placement := range placements {
+		for _, rotation := range placement.Rotations {
+			options = append(options, autoTilePlacement{
+				X:        placement.X,
+				Y:        placement.Y,
+				Rotation: rotation,
+			})
+		}
+	}
+	if len(options) == 0 {
 		return autoTilePlacement{}, false
 	}
 
-	return autoTilePlacement{
-		X:        placements[0].X,
-		Y:        placements[0].Y,
-		Rotation: placements[0].Rotations[0],
-	}, true
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	return options[r.Intn(len(options))], true
 }
 
 func marshalActionPayload(payload any) (json.RawMessage, error) {

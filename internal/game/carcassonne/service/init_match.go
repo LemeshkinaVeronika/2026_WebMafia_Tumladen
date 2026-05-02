@@ -79,6 +79,7 @@ func (e *Engine) BuildInitialMatch(room *model.Room, participants []model.RoomPa
 		Version:         1,
 		Phase:           phase,
 		TurnNumber:      1,
+		TurnStartedAt:   now.Format(time.RFC3339),
 		CurrentPlayerID: currentPlayerID,
 		Players:         statePlayers,
 		Board:           []carcassonneDTO.PlacedTile{startTile},

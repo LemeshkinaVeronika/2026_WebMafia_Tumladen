@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/json"
 	"slices"
+	"time"
 
 	carcassonneDTO "github.com/webmafia/tumladan/internal/game/carcassonne/dto"
 	gameService "github.com/webmafia/tumladan/internal/game/service"
@@ -140,6 +141,7 @@ func (e *Engine) completeTurnAndDrawNextTile(state *carcassonneDTO.GameState) (g
 	}
 
 	state.TurnNumber++
+	state.TurnStartedAt = time.Now().UTC().Format(time.RFC3339)
 	state.Phase = carcassonneDTO.PhasePlaceTile
 
 	return marshalActionResult(*state, model.MatchStatusActive, nil)

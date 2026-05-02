@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -224,7 +225,7 @@ func TestApplyActionStoresMeepleFeatureType(t *testing.T) {
 	}
 }
 
-func TestApplyTurnTimeoutPlacesFirstValidTile(t *testing.T) {
+func TestApplyTurnTimeoutPlacesFirstValidTileAndSkipsMeeple(t *testing.T) {
 	engine := testEngine(t)
 
 	state := carcassonneDTO.GameState{
@@ -239,6 +240,9 @@ func TestApplyTurnTimeoutPlacesFirstValidTile(t *testing.T) {
 		Board: []carcassonneDTO.PlacedTile{
 			{InstanceID: "start", TileID: "start_tile", X: 0, Y: 0, Rotation: 0},
 		},
+		DeckRemaining: []carcassonneDTO.TileInstance{
+			{InstanceID: "next-tile", TileID: "road_straight"},
+		},
 		CurrentTile: &carcassonneDTO.TileInstance{InstanceID: "drawn-tile", TileID: "city_cap"},
 		Meeples:     []carcassonneDTO.PlacedMeeple{},
 	}
@@ -249,8 +253,7 @@ func TestApplyTurnTimeoutPlacesFirstValidTile(t *testing.T) {
 	}
 
 	privateBefore := privateStateForActor(t, engine, match, players, "actor-a")
-	wantPlacement := privateBefore.ValidPlacements[0]
-	wantRotation := wantPlacement.Rotations[0]
+	validPlacements := privateBefore.ValidPlacements
 
 	result, err := engine.ApplyTurnTimeout(t.Context(), match, players)
 	if err != nil {
@@ -259,14 +262,27 @@ func TestApplyTurnTimeoutPlacesFirstValidTile(t *testing.T) {
 
 	var after carcassonneDTO.GameState
 	unmarshalGameState(t, result.NextState, &after)
-	if after.Phase != carcassonneDTO.PhasePlaceMeeple {
-		t.Fatalf("phase after timeout = %s, want %s", after.Phase, carcassonneDTO.PhasePlaceMeeple)
+	if after.Phase != carcassonneDTO.PhasePlaceTile {
+		t.Fatalf("phase after timeout = %s, want %s", after.Phase, carcassonneDTO.PhasePlaceTile)
 	}
-	if after.LastPlacedTile == nil {
-		t.Fatalf("lastPlacedTile after timeout = nil, want placed tile")
+	if after.CurrentPlayerID != "actor-b" {
+		t.Fatalf("currentPlayerID after timeout = %s, want actor-b", after.CurrentPlayerID)
 	}
-	if after.LastPlacedTile.X != wantPlacement.X || after.LastPlacedTile.Y != wantPlacement.Y || after.LastPlacedTile.Rotation != wantRotation {
-		t.Fatalf("placed tile = %#v, want x=%d y=%d rotation=%d", after.LastPlacedTile, wantPlacement.X, wantPlacement.Y, wantRotation)
+	if after.CurrentTile == nil || after.CurrentTile.InstanceID != "next-tile" {
+		t.Fatalf("currentTile after timeout = %#v, want next-tile", after.CurrentTile)
+	}
+	if after.LastPlacedTile != nil {
+		t.Fatalf("lastPlacedTile after timeout = %#v, want nil", after.LastPlacedTile)
+	}
+	placed := placedTileByInstanceID(after.Board, "drawn-tile")
+	if placed == nil {
+		t.Fatalf("placed tile after timeout = nil, want drawn-tile")
+	}
+	if !containsValidPlacement(validPlacements, placed.X, placed.Y, placed.Rotation) {
+		t.Fatalf("placed tile = %#v, want one of %#v", placed, validPlacements)
+	}
+	if len(after.Meeples) != 0 {
+		t.Fatalf("meeples after timeout = %d, want 0", len(after.Meeples))
 	}
 }
 
@@ -379,4 +395,14 @@ func unmarshalGameState(t *testing.T, raw model.JSONB, state *carcassonneDTO.Gam
 	if err := json.Unmarshal(raw, state); err != nil {
 		t.Fatalf("unmarshal game state: %v", err)
 	}
+}
+
+func containsValidPlacement(placements []carcassonneDTO.ValidTilePlacement, x, y, rotation int) bool {
+	for _, placement := range placements {
+		if placement.X != x || placement.Y != y {
+			continue
+		}
+		return slices.Contains(placement.Rotations, rotation)
+	}
+	return false
 }

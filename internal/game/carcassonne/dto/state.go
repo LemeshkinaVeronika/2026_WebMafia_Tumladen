@@ -31,6 +31,7 @@ type GameState struct {
 	Version         int            `json:"version"`
 	Phase           Phase          `json:"phase"`
 	TurnNumber      int            `json:"turnNumber"`
+	TurnStartedAt   string         `json:"turnStartedAt,omitempty"`
 	CurrentPlayerID string         `json:"currentPlayerId"`
 	Players         []PlayerState  `json:"players"`
 	Board           []PlacedTile   `json:"board"`

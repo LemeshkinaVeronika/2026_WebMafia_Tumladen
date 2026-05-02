@@ -17,6 +17,7 @@ func TestBuildPublicStateExposesExplicitTurnDeckAndBoard(t *testing.T) {
 		Version:         1,
 		Phase:           carcassonneDTO.PhasePlaceMeeple,
 		TurnNumber:      3,
+		TurnStartedAt:   "2026-04-30T09:59:00Z",
 		CurrentPlayerID: "actor-a",
 		Players: []carcassonneDTO.PlayerState{
 			{ActorID: "actor-a", DisplayName: "A", Score: 4, MeeplesLeft: 6},
@@ -72,8 +73,8 @@ func TestBuildPublicStateExposesExplicitTurnDeckAndBoard(t *testing.T) {
 	if !publicState.CurrentTurn.MeeplePlaced {
 		t.Fatal("meeplePlaced = false, want true")
 	}
-	if publicState.CurrentTurn.TurnEndsAt == nil || *publicState.CurrentTurn.TurnEndsAt != "2026-04-30T10:02:00Z" {
-		t.Fatalf("turnEndsAt = %v, want 2026-04-30T10:02:00Z", publicState.CurrentTurn.TurnEndsAt)
+	if publicState.CurrentTurn.TurnEndsAt == nil || *publicState.CurrentTurn.TurnEndsAt != "2026-04-30T10:01:00Z" {
+		t.Fatalf("turnEndsAt = %v, want 2026-04-30T10:01:00Z", publicState.CurrentTurn.TurnEndsAt)
 	}
 	if got, want := publicState.Deck.RemainingCount, 1; got != want {
 		t.Fatalf("remainingCount = %d, want %d", got, want)

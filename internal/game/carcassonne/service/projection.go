@@ -49,7 +49,7 @@ func (e *Engine) BuildPublicState(match *model.Match, _ []model.MatchPlayer) (js
 			DrawnTile:    drawnTile,
 			PlacedTile:   state.LastPlacedTile,
 			MeeplePlaced: meeplePlacedOnLastTile(state),
-			TurnEndsAt:   turnEndsAtView(match.UpdatedAt, state),
+			TurnEndsAt:   turnEndsAtView(turnStartedAtView(match.UpdatedAt, state), state),
 		},
 		Deck: carcassonneDTO.DeckState{
 			RemainingCount: len(state.DeckRemaining),
@@ -68,6 +68,17 @@ func (e *Engine) BuildPublicState(match *model.Match, _ []model.MatchPlayer) (js
 	}
 
 	return data, nil
+}
+
+func turnStartedAtView(fallback time.Time, state carcassonneDTO.GameState) time.Time {
+	if state.TurnStartedAt == "" {
+		return fallback
+	}
+	parsed, err := time.Parse(time.RFC3339, state.TurnStartedAt)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }
 
 func turnEndsAtView(turnStartedAt time.Time, state carcassonneDTO.GameState) *string {
