@@ -29,12 +29,20 @@ func New(secret string, ttl time.Duration) *JWTProvider {
 }
 
 func (p *JWTProvider) CreateGuestToken(_ context.Context, sessionID, actorID, displayName string) (string, error) {
+	return p.createActorToken(sessionID, actorID, "guest", displayName)
+}
+
+func (p *JWTProvider) CreateUserToken(_ context.Context, sessionID, actorID, displayName string) (string, error) {
+	return p.createActorToken(sessionID, actorID, "user", displayName)
+}
+
+func (p *JWTProvider) createActorToken(sessionID, actorID, actorType, displayName string) (string, error) {
 	now := time.Now()
 
 	claims := &Claims{
 		SessionID:   sessionID,
 		ActorID:     actorID,
-		ActorType:   "guest",
+		ActorType:   actorType,
 		DisplayName: displayName,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        sessionID,

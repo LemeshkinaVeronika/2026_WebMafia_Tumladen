@@ -35,7 +35,8 @@ func (h *Handler) CreateRoom(w http.ResponseWriter, r *http.Request) {
 			Type:        string(actor.Type),
 			DisplayName: actor.DisplayName,
 		},
-		Name: req.Name,
+		Name:      req.Name,
+		IsPrivate: req.IsPrivate,
 	})
 	if err != nil {
 		switch {

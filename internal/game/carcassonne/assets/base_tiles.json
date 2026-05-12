@@ -557,12 +557,12 @@
       {
         "zoneId": "field_1",
         "type": "field",
-        "segments": ["bottom_right", "right_top"]
+        "segments": ["right_top","bottom_left"]
       },
       {
         "zoneId": "field_2",
         "type": "field",
-        "segments": ["right_bottom", "bottom_left"]
+        "segments": ["right_bottom", "bottom_right"]
       }
     ]
   },
@@ -590,12 +590,12 @@
       {
         "zoneId": "field_1",
         "type": "field",
-        "segments": ["bottom_right", "right_top"]
+        "segments": ["right_top","bottom_left"]
       },
       {
         "zoneId": "field_2",
         "type": "field",
-        "segments": ["right_bottom", "bottom_left"]
+        "segments": ["right_bottom", "bottom_right"]
       }
     ]
   },

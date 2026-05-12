@@ -24,19 +24,20 @@ const (
 
 func roomToResponse(room model.Room) dto.RoomResponse {
 	return dto.RoomResponse{
-		ID:           room.ID,
-		Name:         room.Name,
-		IsPrivate:    room.IsPrivate,
-		InviteCode:   room.InviteCode,
-		OwnerActorID: room.OwnerActorID,
-		Status:       string(room.Status),
-		GameType:     room.GameType,
-		MaxPlayers:   room.MaxPlayers,
-		Settings:     json.RawMessage(room.Settings),
-		PlayersCount: room.PlayersCount,
-		CanStart:     room.Status == model.RoomStatusWaiting && room.PlayersCount >= 2,
-		CreatedAt:    room.CreatedAt.Format(time.RFC3339),
-		UpdatedAt:    room.UpdatedAt.Format(time.RFC3339),
+		ID:             room.ID,
+		Name:           room.Name,
+		IsPrivate:      room.IsPrivate,
+		InviteCode:     room.InviteCode,
+		OwnerActorID:   room.OwnerActorID,
+		OwnerActorType: string(room.OwnerActorType),
+		Status:         string(room.Status),
+		GameType:       room.GameType,
+		MaxPlayers:     room.MaxPlayers,
+		Settings:       json.RawMessage(room.Settings),
+		PlayersCount:   room.PlayersCount,
+		CanStart:       room.Status == model.RoomStatusWaiting && room.PlayersCount >= 2,
+		CreatedAt:      room.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:      room.UpdatedAt.Format(time.RFC3339),
 	}
 }
 
@@ -54,6 +55,7 @@ func roomWithParticipantsToResponse(room model.Room, participants []model.RoomPa
 	for _, p := range participants {
 		resp.Participants = append(resp.Participants, dto.ParticipantResponse{
 			ActorID:     p.ActorID,
+			ActorType:   string(p.ActorType),
 			DisplayName: p.DisplayName,
 			JoinedAt:    p.JoinedAt.Format(time.RFC3339),
 		})
@@ -80,18 +82,19 @@ func (s *Service) CreateRoom(ctx context.Context, req dto.CreateRoomServiceReque
 	}
 
 	room := &model.Room{
-		ID:           uuid.NewString(),
-		Name:         name,
-		IsPrivate:    false,
-		InviteCode:   &inviteCode,
-		OwnerActorID: req.Actor.ID,
-		Status:       model.RoomStatusWaiting,
-		GameType:     defaultGameType,
-		MaxPlayers:   defaultMaxPlayers,
-		Settings:     settings,
-		LastEmptyAt:  &now,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:             uuid.NewString(),
+		Name:           name,
+		IsPrivate:      req.IsPrivate,
+		InviteCode:     &inviteCode,
+		OwnerActorID:   req.Actor.ID,
+		OwnerActorType: model.ActorType(req.Actor.Type),
+		Status:         model.RoomStatusWaiting,
+		GameType:       defaultGameType,
+		MaxPlayers:     defaultMaxPlayers,
+		Settings:       settings,
+		LastEmptyAt:    &now,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 
 	if err := s.repo.Create(ctx, room); err != nil {
@@ -146,7 +149,7 @@ func (s *Service) GetRoomByInviteCode(ctx context.Context, inviteCode string) (*
 }
 
 func (s *Service) JoinRoom(ctx context.Context, req dto.JoinRoomRequest) (*dto.RoomResponse, error) {
-	room, participants, err := s.repo.JoinRoom(ctx, req.RoomID, req.Actor.ID, req.Actor.DisplayName)
+	room, participants, err := s.repo.JoinRoom(ctx, req.RoomID, req.Actor.ID, model.ActorType(req.Actor.Type), req.Actor.DisplayName)
 	if err != nil {
 		switch {
 		case errors.Is(err, roomPostgres.ErrNotFound):

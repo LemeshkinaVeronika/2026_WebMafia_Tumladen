@@ -62,8 +62,8 @@ func (r *Repository) createMatchTx(ctx context.Context, tx *sql.Tx, match *model
 
 func (r *Repository) createMatchPlayersTx(ctx context.Context, tx *sql.Tx, players []model.MatchPlayer) error {
 	query := `
-		INSERT INTO match_players (match_id, actor_id, display_name, seat)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO match_players (match_id, actor_id, actor_type, display_name, seat)
+		VALUES ($1, $2, $3, $4, $5)
 	`
 
 	for _, player := range players {
@@ -72,6 +72,7 @@ func (r *Repository) createMatchPlayersTx(ctx context.Context, tx *sql.Tx, playe
 			query,
 			player.MatchID,
 			player.ActorID,
+			player.ActorType,
 			player.DisplayName,
 			player.Seat,
 		); err != nil {
@@ -166,7 +167,7 @@ func (r *Repository) getMatchByID(ctx context.Context, matchID string) (*model.M
 
 func (r *Repository) listMatchPlayers(ctx context.Context, matchID string) ([]model.MatchPlayer, error) {
 	query := `
-		SELECT match_id, actor_id, display_name, seat, disconnected_at
+		SELECT match_id, actor_id, actor_type, display_name, seat, disconnected_at
 		FROM match_players
 		WHERE match_id = $1
 		ORDER BY seat ASC
@@ -184,6 +185,7 @@ func (r *Repository) listMatchPlayers(ctx context.Context, matchID string) ([]mo
 		if err := rows.Scan(
 			&player.MatchID,
 			&player.ActorID,
+			&player.ActorType,
 			&player.DisplayName,
 			&player.Seat,
 			&player.DisconnectedAt,

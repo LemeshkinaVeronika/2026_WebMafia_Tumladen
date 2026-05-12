@@ -11,17 +11,18 @@ const (
 )
 
 type Room struct {
-	ID           string
-	Name         string
-	IsPrivate    bool
-	InviteCode   *string
-	OwnerActorID string
-	Status       RoomStatus
-	GameType     string
-	MaxPlayers   int
-	Settings     JSONB
-	PlayersCount int
-	LastEmptyAt  *time.Time
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID             string
+	Name           string
+	IsPrivate      bool
+	InviteCode     *string
+	OwnerActorID   string
+	OwnerActorType ActorType
+	Status         RoomStatus
+	GameType       string
+	MaxPlayers     int
+	Settings       JSONB
+	PlayersCount   int
+	LastEmptyAt    *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }

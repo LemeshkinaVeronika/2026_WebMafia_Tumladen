@@ -3,7 +3,8 @@ package dto
 import "encoding/json"
 
 type CreateRoomRequest struct {
-	Name string `json:"name"`
+	Name      string `json:"name"`
+	IsPrivate bool   `json:"isPrivate"`
 }
 
 type ActorRequest struct {
@@ -13,8 +14,9 @@ type ActorRequest struct {
 }
 
 type CreateRoomServiceRequest struct {
-	Actor ActorRequest `json:"actor"`
-	Name  string       `json:"name"`
+	Actor     ActorRequest `json:"actor"`
+	Name      string       `json:"name"`
+	IsPrivate bool         `json:"isPrivate"`
 }
 
 type JoinRoomRequest struct {
@@ -49,24 +51,26 @@ type StartRoomRequest struct {
 }
 
 type RoomResponse struct {
-	ID           string                `json:"id"`
-	Name         string                `json:"name"`
-	IsPrivate    bool                  `json:"isPrivate"`
-	InviteCode   *string               `json:"inviteCode,omitempty"`
-	OwnerActorID string                `json:"ownerActorId"`
-	Status       string                `json:"status"`
-	GameType     string                `json:"gameType"`
-	MaxPlayers   int                   `json:"maxPlayers"`
-	Settings     json.RawMessage       `json:"settings,omitempty"`
-	CanStart     bool                  `json:"canStart"`
-	PlayersCount int                   `json:"playersCount"`
-	Participants []ParticipantResponse `json:"participants,omitempty"`
-	CreatedAt    string                `json:"createdAt"`
-	UpdatedAt    string                `json:"updatedAt"`
+	ID             string                `json:"id"`
+	Name           string                `json:"name"`
+	IsPrivate      bool                  `json:"isPrivate"`
+	InviteCode     *string               `json:"inviteCode,omitempty"`
+	OwnerActorID   string                `json:"ownerActorId"`
+	OwnerActorType string                `json:"ownerActorType"`
+	Status         string                `json:"status"`
+	GameType       string                `json:"gameType"`
+	MaxPlayers     int                   `json:"maxPlayers"`
+	Settings       json.RawMessage       `json:"settings,omitempty"`
+	CanStart       bool                  `json:"canStart"`
+	PlayersCount   int                   `json:"playersCount"`
+	Participants   []ParticipantResponse `json:"participants,omitempty"`
+	CreatedAt      string                `json:"createdAt"`
+	UpdatedAt      string                `json:"updatedAt"`
 }
 
 type ParticipantResponse struct {
 	ActorID     string `json:"actorId"`
+	ActorType   string `json:"actorType"`
 	DisplayName string `json:"displayName"`
 	JoinedAt    string `json:"joinedAt"`
 }

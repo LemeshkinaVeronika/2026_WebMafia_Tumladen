@@ -1084,6 +1084,7 @@ func modelMatchFromResponse(resp *matchDTO.MatchResponse) (*model.Match, []model
 		players = append(players, model.MatchPlayer{
 			MatchID:     resp.ID,
 			ActorID:     player.ActorID,
+			ActorType:   model.ActorType(player.ActorType),
 			DisplayName: player.DisplayName,
 			Seat:        player.Seat,
 		})

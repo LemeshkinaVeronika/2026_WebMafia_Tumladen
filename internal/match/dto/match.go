@@ -4,6 +4,7 @@ import "encoding/json"
 
 type MatchPlayerResponse struct {
 	ActorID        string `json:"actorId"`
+	ActorType      string `json:"actorType"`
 	DisplayName    string `json:"displayName"`
 	Seat           int    `json:"seat"`
 	IsDisconnected bool   `json:"isDisconnected"`

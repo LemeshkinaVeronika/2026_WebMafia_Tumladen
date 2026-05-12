@@ -3,6 +3,7 @@ package minio
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	minioSDK "github.com/minio/minio-go/v7"
@@ -20,6 +21,14 @@ type Config struct {
 type Client struct {
 	client *minioSDK.Client
 	bucket string
+}
+
+type ObjectInfo struct {
+	Bucket      string
+	ObjectName  string
+	Reader      io.Reader
+	Size        int64
+	ContentType string
 }
 
 func New(ctx context.Context, cfg Config) (*Client, error) {
@@ -67,4 +76,43 @@ func (c *Client) EnsureBucket(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (c *Client) Upload(ctx context.Context, obj ObjectInfo) (string, error) {
+	bucket := obj.Bucket
+	if bucket == "" {
+		bucket = c.bucket
+	}
+
+	objectName := obj.ObjectName
+	if objectName == "" {
+		objectName = fmt.Sprintf("avatars/%d", time.Now().UnixNano())
+	}
+
+	_, err := c.client.PutObject(ctx, bucket, objectName, obj.Reader, obj.Size, minioSDK.PutObjectOptions{
+		ContentType: obj.ContentType,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return objectName, nil
+}
+
+func (c *Client) Remove(ctx context.Context, bucket, objectName string) error {
+	if bucket == "" {
+		bucket = c.bucket
+	}
+	return c.client.RemoveObject(ctx, bucket, objectName, minioSDK.RemoveObjectOptions{})
+}
+
+func (c *Client) GetFileURL(ctx context.Context, bucket, objectName string) (string, error) {
+	if bucket == "" {
+		bucket = c.bucket
+	}
+	u, err := c.client.PresignedGetObject(ctx, bucket, objectName, time.Hour, nil)
+	if err != nil {
+		return "", err
+	}
+	return u.String(), nil
 }

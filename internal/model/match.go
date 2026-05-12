@@ -33,3 +33,8 @@ type Match struct {
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
 }
+
+type MatchWithPlayers struct {
+	Match   Match
+	Players []MatchPlayer
+}

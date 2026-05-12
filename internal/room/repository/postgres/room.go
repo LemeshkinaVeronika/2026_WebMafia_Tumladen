@@ -14,9 +14,9 @@ func (r *Repository) Create(ctx context.Context, room *model.Room) error {
 
 	query := `
 		INSERT INTO rooms (
-			id, name, is_private, invite_code, owner_actor_id, status, game_type, max_players, settings, last_empty_at, created_at, updated_at
+			id, name, is_private, invite_code, owner_actor_id, owner_actor_type, status, game_type, max_players, settings, last_empty_at, created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 	`
 
 	_, err := r.db.ExecContext(
@@ -27,6 +27,7 @@ func (r *Repository) Create(ctx context.Context, room *model.Room) error {
 		room.IsPrivate,
 		room.InviteCode,
 		room.OwnerActorID,
+		room.OwnerActorType,
 		room.Status,
 		room.GameType,
 		room.MaxPlayers,
@@ -52,6 +53,7 @@ func (r *Repository) ListPublic(ctx context.Context) ([]model.Room, error) {
 			r.is_private,
 			r.invite_code,
 			r.owner_actor_id,
+			r.owner_actor_type,
 			r.status,
 			r.game_type,
 			r.max_players,
@@ -64,7 +66,7 @@ func (r *Repository) ListPublic(ctx context.Context) ([]model.Room, error) {
 		LEFT JOIN room_participants rp ON rp.room_id = r.id
 		WHERE r.is_private = FALSE
 		GROUP BY
-			r.id, r.name, r.is_private, r.invite_code, r.owner_actor_id,
+			r.id, r.name, r.is_private, r.invite_code, r.owner_actor_id, r.owner_actor_type,
 			r.status, r.game_type, r.max_players, r.settings, r.last_empty_at, r.created_at, r.updated_at
 		ORDER BY r.created_at DESC
 	`
@@ -84,6 +86,7 @@ func (r *Repository) ListPublic(ctx context.Context) ([]model.Room, error) {
 			&room.IsPrivate,
 			&room.InviteCode,
 			&room.OwnerActorID,
+			&room.OwnerActorType,
 			&room.Status,
 			&room.GameType,
 			&room.MaxPlayers,
@@ -110,7 +113,7 @@ func (r *Repository) GetByInviteCode(ctx context.Context, inviteCode string) (*m
 	const op = "room.repository.postgres.GetByInviteCode"
 
 	query := `
-		SELECT id, name, is_private, invite_code, owner_actor_id, status, game_type, max_players, settings, last_empty_at, created_at, updated_at
+		SELECT id, name, is_private, invite_code, owner_actor_id, owner_actor_type, status, game_type, max_players, settings, last_empty_at, created_at, updated_at
 		FROM rooms
 		WHERE invite_code = $1
 		LIMIT 1
@@ -123,6 +126,7 @@ func (r *Repository) GetByInviteCode(ctx context.Context, inviteCode string) (*m
 		&room.IsPrivate,
 		&room.InviteCode,
 		&room.OwnerActorID,
+		&room.OwnerActorType,
 		&room.Status,
 		&room.GameType,
 		&room.MaxPlayers,
@@ -142,7 +146,7 @@ func (r *Repository) GetByID(ctx context.Context, roomID string) (*model.Room, e
 	const op = "room.repository.postgres.GetByID"
 
 	query := `
-		SELECT id, name, is_private, invite_code, owner_actor_id, status, game_type, max_players, settings, last_empty_at, created_at, updated_at
+		SELECT id, name, is_private, invite_code, owner_actor_id, owner_actor_type, status, game_type, max_players, settings, last_empty_at, created_at, updated_at
 		FROM rooms
 		WHERE id = $1
 		LIMIT 1
@@ -155,6 +159,7 @@ func (r *Repository) GetByID(ctx context.Context, roomID string) (*model.Room, e
 		&room.IsPrivate,
 		&room.InviteCode,
 		&room.OwnerActorID,
+		&room.OwnerActorType,
 		&room.Status,
 		&room.GameType,
 		&room.MaxPlayers,
@@ -256,7 +261,7 @@ func (r *Repository) UpdateStatus(ctx context.Context, roomID string, status mod
 	return nil
 }
 
-func (r *Repository) JoinRoom(ctx context.Context, roomID, actorID, displayName string) (*model.Room, []model.RoomParticipant, error) {
+func (r *Repository) JoinRoom(ctx context.Context, roomID, actorID string, actorType model.ActorType, displayName string) (*model.Room, []model.RoomParticipant, error) {
 	const op = "room.repository.postgres.JoinRoom"
 
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -293,7 +298,7 @@ func (r *Repository) JoinRoom(ctx context.Context, roomID, actorID, displayName 
 		return nil, nil, ErrRoomFull
 	}
 
-	if err := r.addParticipantTx(ctx, tx, roomID, actorID, displayName); err != nil {
+	if err := r.addParticipantTx(ctx, tx, roomID, actorID, actorType, displayName); err != nil {
 		return nil, nil, fmt.Errorf("[%s]: add participant failed: %w", op, err)
 	}
 
@@ -537,6 +542,7 @@ func (r *Repository) FindStaleEmptyWaitingRooms(ctx context.Context, olderThan t
 			r.is_private,
 			r.invite_code,
 			r.owner_actor_id,
+			r.owner_actor_type,
 			r.status,
 			r.game_type,
 			r.max_players,
@@ -568,6 +574,7 @@ func (r *Repository) FindStaleEmptyWaitingRooms(ctx context.Context, olderThan t
 			&room.IsPrivate,
 			&room.InviteCode,
 			&room.OwnerActorID,
+			&room.OwnerActorType,
 			&room.Status,
 			&room.GameType,
 			&room.MaxPlayers,
@@ -599,6 +606,7 @@ func (r *Repository) FindRoomsWithReconnectTimeout(ctx context.Context, olderTha
 			r.is_private,
 			r.invite_code,
 			r.owner_actor_id,
+			r.owner_actor_type,
 			r.status,
 			r.game_type,
 			r.max_players,
@@ -635,6 +643,7 @@ func (r *Repository) FindRoomsWithReconnectTimeout(ctx context.Context, olderTha
 			&room.IsPrivate,
 			&room.InviteCode,
 			&room.OwnerActorID,
+			&room.OwnerActorType,
 			&room.Status,
 			&room.GameType,
 			&room.MaxPlayers,

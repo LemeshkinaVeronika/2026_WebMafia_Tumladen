@@ -22,10 +22,15 @@ import (
 	roomPostgres "github.com/webmafia/tumladan/internal/room/repository/postgres"
 	roomService "github.com/webmafia/tumladan/internal/room/service"
 	"github.com/webmafia/tumladan/internal/router"
+	userHTTP "github.com/webmafia/tumladan/internal/user/delivery/http"
+	userPostgres "github.com/webmafia/tumladan/internal/user/repository/postgres"
+	userStorage "github.com/webmafia/tumladan/internal/user/repository/storage"
+	userService "github.com/webmafia/tumladan/internal/user/service"
 	internalws "github.com/webmafia/tumladan/internal/ws"
 	wsticketHTTP "github.com/webmafia/tumladan/internal/ws_ticket/delivery/http"
 	wsticketService "github.com/webmafia/tumladan/internal/ws_ticket/service"
 	wsticketStore "github.com/webmafia/tumladan/internal/ws_ticket/store"
+	"github.com/webmafia/tumladan/pkg/csrfmanager"
 	jwtprovider "github.com/webmafia/tumladan/pkg/jwt"
 	"github.com/webmafia/tumladan/pkg/logger"
 	miniostore "github.com/webmafia/tumladan/pkg/minio"
@@ -60,7 +65,7 @@ func New(ctx context.Context) (*App, error) {
 		return nil, err
 	}
 
-	_, err = miniostore.New(ctx, cfg.MinIO)
+	minioClient, err := miniostore.New(ctx, cfg.MinIO)
 	if err != nil {
 		stop()
 		_ = db.Close()
@@ -69,6 +74,8 @@ func New(ctx context.Context) (*App, error) {
 
 	jwtProvider := jwtprovider.New(cfg.JWTSecret, cfg.JWTTTL)
 	authMiddleware := middleware.NewAuth(jwtProvider)
+	csrfManager := csrfmanager.NewManager(cfg.CSRFSecret, cfg.CSRFTTL)
+	csrfMiddleware := middleware.NewCSRFMiddleware(csrfManager)
 
 	carcassonneEngine, err := carcassonneService.NewEngine()
 	if err != nil {
@@ -89,6 +96,26 @@ func New(ctx context.Context) (*App, error) {
 	guestRepo := guestPostgres.New(db)
 	guestSvc := guestService.New(guestRepo, jwtProvider)
 	guestHandler := guestHTTP.NewHandler(guestSvc)
+
+	userRepo := userPostgres.New(db)
+	avatarStorage := userStorage.New(minioClient, cfg.MinIO.Bucket)
+	userSvc := userService.New(userRepo, avatarStorage, jwtProvider)
+	userHandler := userHTTP.NewHandler(userSvc, csrfManager, []string{
+		"image/jpeg",
+		"image/jpg",
+		"image/png",
+		"image/webp",
+		"image/gif",
+		"image/bmp",
+		"image/svg",
+		"image/svg+xml",
+		"image/avif",
+		"image/heic",
+		"image/heif",
+		"image/ico",
+		"image/x-icon",
+		"image/vnd.microsoft.icon",
+	})
 
 	roomRepo := roomPostgres.New(db)
 	roomSvc := roomService.New(roomRepo, gamesFacade)
@@ -116,6 +143,7 @@ func New(ctx context.Context) (*App, error) {
 	r := router.NewRouter(
 		router.AppHandlers{
 			GuestHandler:       guestHandler,
+			UserHandler:        userHandler,
 			CarcassonneHandler: carcassonneHandler,
 			RoomHandler:        roomHandler,
 			WSHandler:          wsHandler,
@@ -123,6 +151,7 @@ func New(ctx context.Context) (*App, error) {
 		},
 		healthHandler(logger, db),
 		authMiddleware,
+		csrfMiddleware,
 		logger,
 		cfg.CORS,
 	)

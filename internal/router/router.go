@@ -8,6 +8,7 @@ import (
 	guestDelivery "github.com/webmafia/tumladan/internal/guest/delivery/http"
 	"github.com/webmafia/tumladan/internal/middleware"
 	roomDelivery "github.com/webmafia/tumladan/internal/room/delivery/http"
+	userDelivery "github.com/webmafia/tumladan/internal/user/delivery/http"
 	internalws "github.com/webmafia/tumladan/internal/ws"
 	wsticketDelivery "github.com/webmafia/tumladan/internal/ws_ticket/delivery/http"
 	"github.com/webmafia/tumladan/pkg/logger"
@@ -15,6 +16,7 @@ import (
 
 type AppHandlers struct {
 	GuestHandler       *guestDelivery.Handler
+	UserHandler        *userDelivery.Handler
 	CarcassonneHandler *carcassonneDelivery.Handler
 	RoomHandler        *roomDelivery.Handler
 	WSHandler          *internalws.Handler
@@ -22,7 +24,7 @@ type AppHandlers struct {
 	WSTicketHandler    *wsticketDelivery.Handler
 }
 
-func NewRouter(handlers AppHandlers, healthHandler http.HandlerFunc, auth *middleware.Auth, log logger.Logger, cors middleware.CORSConfig) *chi.Mux {
+func NewRouter(handlers AppHandlers, healthHandler http.HandlerFunc, auth *middleware.Auth, csrf *middleware.CSRF, log logger.Logger, cors middleware.CORSConfig) *chi.Mux {
 	r := chi.NewRouter()
 
 	r.Use(middleware.CORS(cors))
@@ -40,6 +42,9 @@ func NewRouter(handlers AppHandlers, healthHandler http.HandlerFunc, auth *middl
 		if handlers.GuestHandler != nil {
 			handlers.GuestHandler.RegisterRoutes(api)
 		}
+		if handlers.UserHandler != nil {
+			handlers.UserHandler.RegisterPublicRoutes(api)
+		}
 
 		if handlers.RoomHandler != nil {
 			handlers.RoomHandler.RegisterPublicRoutes(api)
@@ -49,10 +54,15 @@ func NewRouter(handlers AppHandlers, healthHandler http.HandlerFunc, auth *middl
 			handlers.CarcassonneHandler.RegisterPublicRoutes(api)
 		}
 
-		if auth != nil && handlers.RoomHandler != nil {
+		if auth != nil && (handlers.UserHandler != nil || handlers.RoomHandler != nil || handlers.WSTicketHandler != nil) {
 			api.Group(func(protected chi.Router) {
 				protected.Use(auth.AuthMiddleware)
-				handlers.RoomHandler.RegisterProtectedRoutes(protected)
+				if handlers.UserHandler != nil {
+					handlers.UserHandler.RegisterProtectedRoutes(protected, csrf)
+				}
+				if handlers.RoomHandler != nil {
+					handlers.RoomHandler.RegisterProtectedRoutes(protected)
+				}
 				if handlers.WSTicketHandler != nil {
 					handlers.WSTicketHandler.RegisterProtectedRoutes(protected)
 				}

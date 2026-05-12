@@ -43,6 +43,7 @@ func matchToResponse(match model.Match, players []model.MatchPlayer) dto.MatchRe
 	for _, player := range players {
 		resp.Players = append(resp.Players, dto.MatchPlayerResponse{
 			ActorID:        player.ActorID,
+			ActorType:      string(player.ActorType),
 			DisplayName:    player.DisplayName,
 			Seat:           player.Seat,
 			IsDisconnected: player.DisconnectedAt != nil,

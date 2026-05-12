@@ -20,6 +20,8 @@ type Config struct {
 	LogLevel              string
 	JWTSecret             string
 	JWTTTL                time.Duration
+	CSRFSecret            string
+	CSRFTTL               time.Duration
 	RoomCleanupInterval   time.Duration
 	RoomWaitingCleanupTTL time.Duration
 	RoomPlayingCleanupTTL time.Duration
@@ -41,6 +43,8 @@ func Load() (*Config, error) {
 		LogLevel:              getEnv("LOG_LEVEL", "info"),
 		JWTSecret:             jwtSecret,
 		JWTTTL:                getEnvDuration("JWT_TTL", 24*time.Hour),
+		CSRFSecret:            getEnv("CSRF_SECRET", jwtSecret),
+		CSRFTTL:               getEnvDuration("CSRF_TTL", 2*time.Hour),
 		RoomCleanupInterval:   getEnvDuration("ROOM_CLEANUP_INTERVAL", 30*time.Second),
 		RoomWaitingCleanupTTL: getEnvDuration("ROOM_WAITING_CLEANUP_TTL", 15*time.Minute),
 		RoomPlayingCleanupTTL: getEnvDuration("ROOM_PLAYING_CLEANUP_TTL", 3*time.Minute),
@@ -67,12 +71,13 @@ func Load() (*Config, error) {
 				"http://localhost:3000",
 				"http://localhost:5173",
 				"http://87.239.104.134:3000",
+				"http://tumladen.online",
 			}),
 			AllowedMethods: []string{
 				"GET", "POST", "PUT", "DELETE", "OPTIONS",
 			},
 			AllowedHeaders: []string{
-				"Content-Type", "Authorization",
+				"Content-Type", "Authorization", middleware.CSRFHeader,
 			},
 			AllowCredentials: false,
 		},

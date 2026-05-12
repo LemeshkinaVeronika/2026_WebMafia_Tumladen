@@ -42,8 +42,9 @@ func CORS(config CORSConfig) func(next http.Handler) http.Handler {
 }
 
 func IsOriginAllowed(origin string, allowedOrigins []string) bool {
+	origin = strings.TrimRight(origin, "/")
 	for _, o := range allowedOrigins {
-		if o == origin {
+		if strings.TrimRight(o, "/") == origin {
 			return true
 		}
 	}

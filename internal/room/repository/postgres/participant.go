@@ -7,17 +7,18 @@ import (
 	"github.com/webmafia/tumladan/internal/model"
 )
 
-func (r *Repository) AddParticipant(ctx context.Context, roomID, actorID, displayName string) error {
+func (r *Repository) AddParticipant(ctx context.Context, roomID, actorID string, actorType model.ActorType, displayName string) error {
 	const op = "room.repository.postgres.AddParticipant"
 
 	query := `
-		INSERT INTO room_participants (room_id, actor_id, display_name, joined_at)
-		VALUES ($1, $2, $3, NOW())
+		INSERT INTO room_participants (room_id, actor_id, actor_type, display_name, joined_at)
+		VALUES ($1, $2, $3, $4, NOW())
 		ON CONFLICT (room_id, actor_id) DO UPDATE
-		SET display_name = EXCLUDED.display_name
+		SET actor_type = EXCLUDED.actor_type,
+		    display_name = EXCLUDED.display_name
 	`
 
-	_, err := r.db.ExecContext(ctx, query, roomID, actorID, displayName)
+	_, err := r.db.ExecContext(ctx, query, roomID, actorID, actorType, displayName)
 	if err != nil {
 		return fmt.Errorf("[%s]: exec failed: %w", op, err)
 	}
@@ -71,7 +72,7 @@ func (r *Repository) ListParticipants(ctx context.Context, roomID string) ([]mod
 	const op = "room.repository.postgres.ListParticipants"
 
 	query := `
-		SELECT room_id, actor_id, display_name, joined_at
+		SELECT room_id, actor_id, actor_type, display_name, joined_at
 		FROM room_participants
 		WHERE room_id = $1
 		ORDER BY joined_at ASC
@@ -89,6 +90,7 @@ func (r *Repository) ListParticipants(ctx context.Context, roomID string) ([]mod
 		if err := rows.Scan(
 			&p.RoomID,
 			&p.ActorID,
+			&p.ActorType,
 			&p.DisplayName,
 			&p.JoinedAt,
 		); err != nil {
