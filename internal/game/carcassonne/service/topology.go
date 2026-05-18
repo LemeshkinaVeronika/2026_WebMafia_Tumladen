@@ -242,3 +242,36 @@ func (e *Engine) findNeighborZoneBySegment(
 
 	return nil, nil
 }
+
+func (e *Engine) findNeighborFieldSegmentBySegment(
+	state carcassonneDTO.GameState,
+	x, y int,
+	segment carcassonneDTO.ZoneSegment,
+) (*placedFieldSegmentRef, error) {
+	neighborTile := tileAt(state.Board, x, y)
+	if neighborTile == nil {
+		return nil, nil
+	}
+
+	def, ok := e.catalog.Get(neighborTile.TileID)
+	if !ok {
+		return nil, fmt.Errorf("tile definition not found: %s", neighborTile.TileID)
+	}
+
+	for _, zone := range def.Zones {
+		if zone.Type != carcassonneDTO.ZoneTypeField {
+			continue
+		}
+
+		rotated := rotateSegments(zone.Segments, neighborTile.Rotation)
+		if containsSegment(rotated, segment) {
+			return &placedFieldSegmentRef{
+				TileInstanceID: neighborTile.InstanceID,
+				ZoneID:         zone.ZoneID,
+				Segment:        segment,
+			}, nil
+		}
+	}
+
+	return nil, nil
+}

@@ -7,18 +7,18 @@ import (
 )
 
 type disjointSet struct {
-	parent map[placedZoneRef]placedZoneRef
-	size   map[placedZoneRef]int
+	parent map[placedFieldSegmentRef]placedFieldSegmentRef
+	size   map[placedFieldSegmentRef]int
 }
 
 func newDisjointSet() *disjointSet {
 	return &disjointSet{
-		parent: make(map[placedZoneRef]placedZoneRef),
-		size:   make(map[placedZoneRef]int),
+		parent: make(map[placedFieldSegmentRef]placedFieldSegmentRef),
+		size:   make(map[placedFieldSegmentRef]int),
 	}
 }
 
-func (d *disjointSet) add(ref placedZoneRef) {
+func (d *disjointSet) add(ref placedFieldSegmentRef) {
 	if _, ok := d.parent[ref]; ok {
 		return
 	}
@@ -26,23 +26,23 @@ func (d *disjointSet) add(ref placedZoneRef) {
 	d.size[ref] = 1
 }
 
-func (d *disjointSet) find(ref placedZoneRef) (placedZoneRef, bool) {
+func (d *disjointSet) find(ref placedFieldSegmentRef) (placedFieldSegmentRef, bool) {
 	parent, ok := d.parent[ref]
 	if !ok {
-		return placedZoneRef{}, false
+		return placedFieldSegmentRef{}, false
 	}
 	if parent == ref {
 		return ref, true
 	}
 	root, ok := d.find(parent)
 	if !ok {
-		return placedZoneRef{}, false
+		return placedFieldSegmentRef{}, false
 	}
 	d.parent[ref] = root
 	return root, true
 }
 
-func (d *disjointSet) union(a, b placedZoneRef) {
+func (d *disjointSet) union(a, b placedFieldSegmentRef) {
 	d.add(a)
 	d.add(b)
 
@@ -61,20 +61,35 @@ func (d *disjointSet) union(a, b placedZoneRef) {
 	delete(d.size, rootB)
 }
 
+type placedFieldSegmentRef struct {
+	TileInstanceID string
+	ZoneID         string
+	Segment        carcassonneDTO.ZoneSegment
+}
+
+type fieldSegment struct {
+	Ref     placedFieldSegmentRef
+	Tile    carcassonneDTO.PlacedTile
+	Zone    carcassonneDTO.ZoneDefinition
+	Segment carcassonneDTO.ZoneSegment
+}
+
 type fieldGraph struct {
 	dsu                   *disjointSet
-	zonesByRoot           map[placedZoneRef][]placedZoneRef
-	meeplesByRoot         map[placedZoneRef]map[string]int
-	fieldZoneByRef        map[placedZoneRef]placedZone
+	segmentsByRoot        map[placedFieldSegmentRef][]placedFieldSegmentRef
+	meeplesByRoot         map[placedFieldSegmentRef]map[string]int
+	fieldSegmentByRef     map[placedFieldSegmentRef]fieldSegment
+	segmentsByZoneRef     map[placedZoneRef][]placedFieldSegmentRef
 	completedCityFeatures map[placedZoneRef]struct{}
 }
 
 func (e *Engine) buildFieldGraph(state carcassonneDTO.GameState) (*fieldGraph, error) {
 	graph := &fieldGraph{
 		dsu:                   newDisjointSet(),
-		zonesByRoot:           make(map[placedZoneRef][]placedZoneRef),
-		meeplesByRoot:         make(map[placedZoneRef]map[string]int),
-		fieldZoneByRef:        make(map[placedZoneRef]placedZone),
+		segmentsByRoot:        make(map[placedFieldSegmentRef][]placedFieldSegmentRef),
+		meeplesByRoot:         make(map[placedFieldSegmentRef]map[string]int),
+		fieldSegmentByRef:     make(map[placedFieldSegmentRef]fieldSegment),
+		segmentsByZoneRef:     make(map[placedZoneRef][]placedFieldSegmentRef),
 		completedCityFeatures: make(map[placedZoneRef]struct{}),
 	}
 
@@ -89,68 +104,89 @@ func (e *Engine) buildFieldGraph(state carcassonneDTO.GameState) (*fieldGraph, e
 				continue
 			}
 
-			ref := placedZoneRef{
+			zoneRef := placedZoneRef{
 				TileInstanceID: tile.InstanceID,
 				ZoneID:         zone.ZoneID,
 			}
-			graph.dsu.add(ref)
-			graph.fieldZoneByRef[ref] = placedZone{
-				Ref:      ref,
-				Tile:     tile,
-				Zone:     zone,
-				Segments: rotateSegments(zone.Segments, tile.Rotation),
+
+			segments := rotateSegments(zone.Segments, tile.Rotation)
+			for _, segment := range segments {
+				ref := placedFieldSegmentRef{
+					TileInstanceID: tile.InstanceID,
+					ZoneID:         zone.ZoneID,
+					Segment:        segment,
+				}
+				graph.dsu.add(ref)
+				graph.fieldSegmentByRef[ref] = fieldSegment{
+					Ref:     ref,
+					Tile:    tile,
+					Zone:    zone,
+					Segment: segment,
+				}
+				graph.segmentsByZoneRef[zoneRef] = append(graph.segmentsByZoneRef[zoneRef], ref)
+			}
+
+			for i := range segments {
+				for j := i + 1; j < len(segments); j++ {
+					if !fieldSegmentsConnectedInsideZone(segments[i], segments[j]) {
+						continue
+					}
+					graph.dsu.union(
+						placedFieldSegmentRef{TileInstanceID: tile.InstanceID, ZoneID: zone.ZoneID, Segment: segments[i]},
+						placedFieldSegmentRef{TileInstanceID: tile.InstanceID, ZoneID: zone.ZoneID, Segment: segments[j]},
+					)
+				}
 			}
 		}
 	}
 
-	for _, zone := range graph.fieldZoneByRef {
-		for _, segment := range zone.Segments {
-			match, ok := borderNeighbor(segment)
-			if !ok {
-				continue
-			}
-
-			neighborTile := tileAt(state.Board, zone.Tile.X+match.DX, zone.Tile.Y+match.DY)
-			if neighborTile == nil {
-				continue
-			}
-
-			neighborRef, err := e.findNeighborZoneBySegment(
-				state,
-				neighborTile.X,
-				neighborTile.Y,
-				carcassonneDTO.ZoneTypeField,
-				match.NeighborSegment,
-			)
-			if err != nil {
-				return nil, err
-			}
-			if neighborRef == nil {
-				continue
-			}
-
-			graph.dsu.union(zone.Ref, *neighborRef)
+	for _, segment := range graph.fieldSegmentByRef {
+		match, ok := borderNeighbor(segment.Segment)
+		if !ok {
+			continue
 		}
+
+		neighborTile := tileAt(state.Board, segment.Tile.X+match.DX, segment.Tile.Y+match.DY)
+		if neighborTile == nil {
+			continue
+		}
+
+		neighborRef, err := e.findNeighborFieldSegmentBySegment(
+			state,
+			neighborTile.X,
+			neighborTile.Y,
+			match.NeighborSegment,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if neighborRef == nil {
+			continue
+		}
+
+		graph.dsu.union(segment.Ref, *neighborRef)
 	}
 
-	for ref := range graph.fieldZoneByRef {
+	for ref := range graph.fieldSegmentByRef {
 		root, ok := graph.dsu.find(ref)
 		if !ok {
 			continue
 		}
-		graph.zonesByRoot[root] = append(graph.zonesByRoot[root], ref)
+		graph.segmentsByRoot[root] = append(graph.segmentsByRoot[root], ref)
 	}
 
 	for _, meeple := range state.Meeples {
-		ref := placedZoneRef{TileInstanceID: meeple.TileInstanceID, ZoneID: meeple.ZoneID}
-		root, ok := graph.dsu.find(ref)
-		if !ok {
-			continue
+		zoneRef := placedZoneRef{TileInstanceID: meeple.TileInstanceID, ZoneID: meeple.ZoneID}
+		for _, segmentRef := range graph.segmentsByZoneRef[zoneRef] {
+			root, ok := graph.dsu.find(segmentRef)
+			if !ok {
+				continue
+			}
+			if graph.meeplesByRoot[root] == nil {
+				graph.meeplesByRoot[root] = make(map[string]int)
+			}
+			graph.meeplesByRoot[root][meeple.ActorID]++
 		}
-		if graph.meeplesByRoot[root] == nil {
-			graph.meeplesByRoot[root] = make(map[string]int)
-		}
-		graph.meeplesByRoot[root][meeple.ActorID]++
 	}
 
 	if err := e.collectCompletedCityFeatures(state, graph.completedCityFeatures); err != nil {
@@ -158,6 +194,32 @@ func (e *Engine) buildFieldGraph(state carcassonneDTO.GameState) (*fieldGraph, e
 	}
 
 	return graph, nil
+}
+
+func (g *fieldGraph) rootsForZone(ref placedZoneRef) []placedFieldSegmentRef {
+	if g == nil {
+		return nil
+	}
+
+	roots := make([]placedFieldSegmentRef, 0)
+	for _, segmentRef := range g.segmentsByZoneRef[ref] {
+		root, ok := g.dsu.find(segmentRef)
+		if !ok {
+			continue
+		}
+		if slices.Contains(roots, root) {
+			continue
+		}
+		roots = append(roots, root)
+	}
+
+	return roots
+}
+
+func fieldSegmentsConnectedInsideZone(a, b carcassonneDTO.ZoneSegment) bool {
+	return a == carcassonneDTO.SegmentCenter ||
+		b == carcassonneDTO.SegmentCenter ||
+		segmentsAdjacent(a, b)
 }
 
 func (e *Engine) collectCompletedCityFeatures(state carcassonneDTO.GameState, completed map[placedZoneRef]struct{}) error {
@@ -222,15 +284,15 @@ func compareZoneRefs(a, b placedZoneRef) int {
 	return 0
 }
 
-func (e *Engine) fieldCompletedCityCount(state carcassonneDTO.GameState, graph *fieldGraph, root placedZoneRef) (int, error) {
+func (e *Engine) fieldCompletedCityCount(state carcassonneDTO.GameState, graph *fieldGraph, root placedFieldSegmentRef) (int, error) {
 	if graph == nil {
 		return 0, nil
 	}
 
 	seen := make(map[placedZoneRef]struct{})
-	for _, fieldRef := range graph.zonesByRoot[root] {
-		fieldZone := graph.fieldZoneByRef[fieldRef]
-		cityRefs := e.adjacentCityZoneRefs(state, fieldZone)
+	for _, fieldRef := range graph.segmentsByRoot[root] {
+		fieldSegment := graph.fieldSegmentByRef[fieldRef]
+		cityRefs := e.adjacentCityZoneRefs(state, fieldSegment)
 		for _, cityRef := range cityRefs {
 			feature, err := e.buildFeature(state, cityRef)
 			if err != nil {
@@ -246,8 +308,8 @@ func (e *Engine) fieldCompletedCityCount(state carcassonneDTO.GameState, graph *
 	return len(seen), nil
 }
 
-func (e *Engine) adjacentCityZoneRefs(state carcassonneDTO.GameState, fieldZone placedZone) []placedZoneRef {
-	def, ok := e.catalog.Get(fieldZone.Tile.TileID)
+func (e *Engine) adjacentCityZoneRefs(state carcassonneDTO.GameState, fieldSegment fieldSegment) []placedZoneRef {
+	def, ok := e.catalog.Get(fieldSegment.Tile.TileID)
 	if !ok {
 		return nil
 	}
@@ -258,13 +320,13 @@ func (e *Engine) adjacentCityZoneRefs(state carcassonneDTO.GameState, fieldZone 
 			continue
 		}
 
-		citySegments := rotateSegments(zone.Segments, fieldZone.Tile.Rotation)
-		if !segmentsTouch(fieldZone.Segments, citySegments) {
+		citySegments := rotateSegments(zone.Segments, fieldSegment.Tile.Rotation)
+		if !segmentsTouch([]carcassonneDTO.ZoneSegment{fieldSegment.Segment}, citySegments) {
 			continue
 		}
 
 		result = append(result, placedZoneRef{
-			TileInstanceID: fieldZone.Tile.InstanceID,
+			TileInstanceID: fieldSegment.Tile.InstanceID,
 			ZoneID:         zone.ZoneID,
 		})
 	}
@@ -284,54 +346,41 @@ func segmentsTouch(a, b []carcassonneDTO.ZoneSegment) bool {
 }
 
 func segmentsAdjacent(a, b carcassonneDTO.ZoneSegment) bool {
-	// Approximation for field-city adjacency on the coarse segment grid.
-	ax, ay, okA := segmentCoordinate(a)
-	bx, by, okB := segmentCoordinate(b)
-	if !okA || !okB {
-		return false
+	for _, adjacent := range adjacentSegments(a) {
+		if adjacent == b {
+			return true
+		}
 	}
-
-	dx := ax - bx
-	if dx < 0 {
-		dx = -dx
-	}
-	dy := ay - by
-	if dy < 0 {
-		dy = -dy
-	}
-
-	return dx+dy == 1
+	return false
 }
 
-func segmentCoordinate(segment carcassonneDTO.ZoneSegment) (int, int, bool) {
+func adjacentSegments(segment carcassonneDTO.ZoneSegment) []carcassonneDTO.ZoneSegment {
 	switch segment {
 	case carcassonneDTO.SegmentTopLeft:
-		return 0, 0, true
+		return []carcassonneDTO.ZoneSegment{carcassonneDTO.SegmentTopCenter, carcassonneDTO.SegmentLeftTop}
 	case carcassonneDTO.SegmentTopCenter:
-		return 1, 0, true
+		return []carcassonneDTO.ZoneSegment{carcassonneDTO.SegmentTopLeft, carcassonneDTO.SegmentTopRight}
 	case carcassonneDTO.SegmentTopRight:
-		return 2, 0, true
+		return []carcassonneDTO.ZoneSegment{carcassonneDTO.SegmentTopCenter, carcassonneDTO.SegmentRightTop}
 	case carcassonneDTO.SegmentRightTop:
-		return 3, 0, true
+		return []carcassonneDTO.ZoneSegment{carcassonneDTO.SegmentTopRight, carcassonneDTO.SegmentRightCenter}
 	case carcassonneDTO.SegmentRightCenter:
-		return 3, 1, true
+		return []carcassonneDTO.ZoneSegment{carcassonneDTO.SegmentRightTop, carcassonneDTO.SegmentRightBottom}
 	case carcassonneDTO.SegmentRightBottom:
-		return 3, 2, true
+		return []carcassonneDTO.ZoneSegment{carcassonneDTO.SegmentRightCenter, carcassonneDTO.SegmentBottomRight}
 	case carcassonneDTO.SegmentBottomRight:
-		return 2, 3, true
+		return []carcassonneDTO.ZoneSegment{carcassonneDTO.SegmentRightBottom, carcassonneDTO.SegmentBottomCenter}
 	case carcassonneDTO.SegmentBottomCenter:
-		return 1, 3, true
+		return []carcassonneDTO.ZoneSegment{carcassonneDTO.SegmentBottomRight, carcassonneDTO.SegmentBottomLeft}
 	case carcassonneDTO.SegmentBottomLeft:
-		return 0, 3, true
+		return []carcassonneDTO.ZoneSegment{carcassonneDTO.SegmentBottomCenter, carcassonneDTO.SegmentLeftBottom}
 	case carcassonneDTO.SegmentLeftBottom:
-		return -1, 2, true
+		return []carcassonneDTO.ZoneSegment{carcassonneDTO.SegmentBottomLeft, carcassonneDTO.SegmentLeftCenter}
 	case carcassonneDTO.SegmentLeftCenter:
-		return -1, 1, true
+		return []carcassonneDTO.ZoneSegment{carcassonneDTO.SegmentLeftBottom, carcassonneDTO.SegmentLeftTop}
 	case carcassonneDTO.SegmentLeftTop:
-		return -1, 0, true
-	case carcassonneDTO.SegmentCenter:
-		return 1, 1, true
+		return []carcassonneDTO.ZoneSegment{carcassonneDTO.SegmentLeftCenter, carcassonneDTO.SegmentTopLeft}
 	default:
-		return 0, 0, false
+		return nil
 	}
 }

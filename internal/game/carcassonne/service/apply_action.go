@@ -312,11 +312,16 @@ func (e *Engine) canPlaceMeeple(state carcassonneDTO.GameState, actorID string, 
 		if err != nil {
 			return false
 		}
-		root, ok := graph.dsu.find(start)
-		if !ok {
+		roots := graph.rootsForZone(start)
+		if len(roots) == 0 {
 			return false
 		}
-		return len(graph.meeplesByRoot[root]) == 0
+		for _, root := range roots {
+			if len(graph.meeplesByRoot[root]) > 0 {
+				return false
+			}
+		}
+		return true
 
 	case carcassonneDTO.ZoneTypeRoad, carcassonneDTO.ZoneTypeCity:
 		feature, err := e.buildFeature(state, start)
