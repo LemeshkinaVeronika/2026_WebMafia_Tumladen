@@ -6,6 +6,7 @@ type MatchPlayerResponse struct {
 	ActorID        string `json:"actorId"`
 	ActorType      string `json:"actorType"`
 	DisplayName    string `json:"displayName"`
+	AvatarURL      string `json:"avatarUrl,omitempty"`
 	Seat           int    `json:"seat"`
 	IsDisconnected bool   `json:"isDisconnected"`
 }

@@ -214,6 +214,11 @@ func (s *Service) UpdateRoomSettings(ctx context.Context, req dto.UpdateRoomSett
 		}
 	}
 
+	isPrivate := room.IsPrivate
+	if req.IsPrivate != nil {
+		isPrivate = *req.IsPrivate
+	}
+
 	gameType := room.GameType
 	if req.GameType != "" {
 		gameType = strings.TrimSpace(req.GameType)
@@ -244,7 +249,7 @@ func (s *Service) UpdateRoomSettings(ctx context.Context, req dto.UpdateRoomSett
 		return nil, mapGameRoomError(err)
 	}
 
-	updatedRoom, participants, err := s.repo.UpdateSettings(ctx, req.RoomID, name, gameType, maxPlayers, settings)
+	updatedRoom, participants, err := s.repo.UpdateSettings(ctx, req.RoomID, name, isPrivate, gameType, maxPlayers, settings)
 	if err != nil {
 		switch {
 		case errors.Is(err, roomPostgres.ErrNotFound):

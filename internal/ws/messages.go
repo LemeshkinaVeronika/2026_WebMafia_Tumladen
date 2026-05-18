@@ -23,6 +23,7 @@ type LeaveRoomPayload struct {
 type UpdateRoomSettingsPayload struct {
 	Name       string          `json:"name"`
 	RoomID     string          `json:"roomId"`
+	IsPrivate  *bool           `json:"isPrivate,omitempty"`
 	GameType   string          `json:"gameType"`
 	MaxPlayers int             `json:"maxPlayers"`
 	Settings   json.RawMessage `json:"settings"`

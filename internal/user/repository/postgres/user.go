@@ -152,10 +152,11 @@ func (m *Repository) ListFinishedMatchesByUserID(ctx context.Context, userID str
 
 func (m *Repository) listMatchPlayers(ctx context.Context, matchID string) ([]model.MatchPlayer, error) {
 	query := `
-		SELECT match_id, actor_id, actor_type, display_name, seat, disconnected_at
-		FROM match_players
-		WHERE match_id = $1
-		ORDER BY seat ASC
+		SELECT mp.match_id, mp.actor_id, mp.actor_type, mp.display_name, COALESCE(u.avatar_url, ''), mp.seat, mp.disconnected_at
+		FROM match_players mp
+		LEFT JOIN users u ON mp.actor_type = 'user' AND u.id::text = mp.actor_id
+		WHERE mp.match_id = $1
+		ORDER BY mp.seat ASC
 	`
 
 	rows, err := m.Conn.QueryContext(ctx, query, matchID)
@@ -172,6 +173,7 @@ func (m *Repository) listMatchPlayers(ctx context.Context, matchID string) ([]mo
 			&player.ActorID,
 			&player.ActorType,
 			&player.DisplayName,
+			&player.AvatarURL,
 			&player.Seat,
 			&player.DisconnectedAt,
 		); err != nil {

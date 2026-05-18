@@ -31,6 +31,7 @@ type LeaveRoomRequest struct {
 
 type UpdateRoomSettingsRequest struct {
 	Name       string          `json:"name"`
+	IsPrivate  *bool           `json:"isPrivate,omitempty"`
 	GameType   string          `json:"gameType"`
 	MaxPlayers int             `json:"maxPlayers"`
 	Settings   json.RawMessage `json:"settings"`
@@ -40,6 +41,7 @@ type UpdateRoomSettingsServiceRequest struct {
 	ActorID    string          `json:"actorId"`
 	RoomID     string          `json:"roomId"`
 	Name       string          `json:"name"`
+	IsPrivate  *bool           `json:"isPrivate,omitempty"`
 	GameType   string          `json:"gameType"`
 	MaxPlayers int             `json:"maxPlayers"`
 	Settings   json.RawMessage `json:"settings"`

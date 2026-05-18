@@ -45,6 +45,7 @@ func matchToResponse(match model.Match, players []model.MatchPlayer) dto.MatchRe
 			ActorID:        player.ActorID,
 			ActorType:      string(player.ActorType),
 			DisplayName:    player.DisplayName,
+			AvatarURL:      player.AvatarURL,
 			Seat:           player.Seat,
 			IsDisconnected: player.DisconnectedAt != nil,
 		})

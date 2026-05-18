@@ -18,7 +18,7 @@ type IRepository interface {
 	ListParticipants(ctx context.Context, roomID string) ([]model.RoomParticipant, error)
 	JoinRoom(ctx context.Context, roomID, actorID string, actorType model.ActorType, displayName string) (*model.Room, []model.RoomParticipant, error)
 
-	UpdateSettings(ctx context.Context, roomID, name, gameType string, maxPlayers int, settings model.JSONB) (*model.Room, []model.RoomParticipant, error)
+	UpdateSettings(ctx context.Context, roomID, name string, isPrivate bool, gameType string, maxPlayers int, settings model.JSONB) (*model.Room, []model.RoomParticipant, error)
 	UpdateStatus(ctx context.Context, roomID string, status model.RoomStatus) error
 
 	StartRoomWithMatch(ctx context.Context, roomID string, match *model.Match, players []model.MatchPlayer) (*model.Room, []model.RoomParticipant, error)

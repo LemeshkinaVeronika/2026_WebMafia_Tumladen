@@ -562,6 +562,7 @@ func (h *MessageHandler) handleUpdateRoomSettings(ctx context.Context, state *Co
 			ActorID:    state.Actor.ID,
 			RoomID:     p.RoomID,
 			Name:       p.Name,
+			IsPrivate:  p.IsPrivate,
 			GameType:   p.GameType,
 			MaxPlayers: p.MaxPlayers,
 			Settings:   p.Settings,
