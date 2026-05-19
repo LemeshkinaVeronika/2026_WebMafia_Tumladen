@@ -169,7 +169,7 @@ func (r *Repository) listMatchPlayers(ctx context.Context, matchID string) ([]mo
 	query := `
 		SELECT mp.match_id, mp.actor_id, mp.actor_type, mp.display_name, COALESCE(u.avatar_url, ''), mp.seat, mp.disconnected_at
 		FROM match_players mp
-		LEFT JOIN users u ON mp.actor_type = 'user' AND u.id::text = mp.actor_id
+		LEFT JOIN users u ON mp.actor_type = 'user' AND u.id = mp.actor_id
 		WHERE mp.match_id = $1
 		ORDER BY mp.seat ASC
 	`
