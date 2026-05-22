@@ -4,16 +4,16 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"path/filepath"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/webmafia/tumladan/pkg/minio"
 )
 
-func (s *Storage) UploadAvatar(ctx context.Context, file io.Reader, filename string, size int64, contentType string) (string, error) {
+func (s *Storage) UploadAvatar(ctx context.Context, file io.Reader, _ string, size int64, contentType string) (string, error) {
 	obj := minio.ObjectInfo{
 		Bucket:      s.bucket,
-		ObjectName:  cleanAvatarFilename(filename),
+		ObjectName:  avatarObjectName(contentType),
 		Reader:      file,
 		Size:        size,
 		ContentType: contentType,
@@ -41,10 +41,7 @@ func (s *Storage) GetAvatarURL(ctx context.Context, objectName string) (string, 
 	return url, nil
 }
 
-func cleanAvatarFilename(filename string) string {
-	filename = filepath.Base(strings.TrimSpace(filename))
-	if filename == "." || filename == string(filepath.Separator) {
-		return ""
-	}
-	return filename
+func avatarObjectName(contentType string) string {
+	ext := strings.TrimPrefix(strings.TrimSpace(contentType), "image/")
+	return fmt.Sprintf("%s.%s", uuid.NewString(), ext)
 }

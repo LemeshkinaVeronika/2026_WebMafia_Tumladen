@@ -98,7 +98,7 @@ func New(ctx context.Context) (*App, error) {
 	guestHandler := guestHTTP.NewHandler(guestSvc)
 
 	userRepo := userPostgres.New(db)
-	avatarStorage := userStorage.New(minioClient, cfg.MinIO.Bucket)
+	avatarStorage := userStorage.New(minioClient, cfg.MinIO.AvatarBucket)
 	userSvc := userService.New(userRepo, avatarStorage, jwtProvider)
 	userHandler := userHTTP.NewHandler(userSvc, csrfManager, []string{
 		"image/jpeg",

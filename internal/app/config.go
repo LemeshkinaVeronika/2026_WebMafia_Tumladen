@@ -60,11 +60,12 @@ func Load() (*Config, error) {
 			ConnMaxLifetime: getEnvDuration("DB_CONN_MAX_LIFETIME", 30*time.Minute),
 		},
 		MinIO: minio.Config{
-			Endpoint:  getEnv("MINIO_ENDPOINT", "localhost:9000"),
-			AccessKey: getEnv("MINIO_ACCESS_KEY", "minioadmin"),
-			SecretKey: getEnv("MINIO_SECRET_KEY", "minioadmin"),
-			Bucket:    getEnv("MINIO_BUCKET", "tumladan-assets"),
-			UseSSL:    getEnvBool("MINIO_USE_SSL", false),
+			Endpoint:     getEnv("MINIO_ENDPOINT", "localhost:9000"),
+			AccessKey:    getEnv("MINIO_ACCESS_KEY", "minioadmin"),
+			SecretKey:    getEnv("MINIO_SECRET_KEY", "minioadmin"),
+			Bucket:       getEnv("MINIO_BUCKET", "tumladan-assets"),
+			AvatarBucket: getEnv("MINIO_AVATAR_BUCKET", "tumladan-avatars"),
+			UseSSL:       getEnvBool("MINIO_USE_SSL", false),
 		},
 		CORS: middleware.CORSConfig{
 			AllowedOrigins: getEnvCSV("CORS_ALLOWED_ORIGINS", []string{
