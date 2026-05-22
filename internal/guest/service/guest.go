@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/webmafia/tumladan/internal/guest/dto"
@@ -19,7 +20,8 @@ const (
 
 func (s *Service) CreateGuestSession(ctx context.Context, req dto.CreateGuestSessionRequest) (*dto.CreateGuestSessionResponse, error) {
 	displayName := strings.TrimSpace(req.DisplayName)
-	if len(displayName) < minDisplayNameLength || len(displayName) > maxDisplayNameLength {
+	displayNameLength := utf8.RuneCountInString(displayName)
+	if displayNameLength < minDisplayNameLength || displayNameLength > maxDisplayNameLength {
 		return nil, ErrInvalidDisplayName
 	}
 

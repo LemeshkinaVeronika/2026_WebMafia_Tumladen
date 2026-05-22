@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/webmafia/tumladan/internal/model"
@@ -459,7 +460,8 @@ func normalizeStats(stats *dto.UserGameStats) {
 }
 
 func validateNickname(nickname string) error {
-	if len(nickname) < minNicknameLength || len(nickname) > maxNicknameLength {
+	length := utf8.RuneCountInString(nickname)
+	if length < minNicknameLength || length > maxNicknameLength {
 		return fmt.Errorf("nickname must be between %d and %d characters", minNicknameLength, maxNicknameLength)
 	}
 	for _, r := range nickname {
