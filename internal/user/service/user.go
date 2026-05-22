@@ -231,6 +231,7 @@ func (s *Service) UpdateProfile(ctx context.Context, req dto.UpdateProfileReques
 		Nickname:     profile.Nickname,
 		Email:        profile.Email,
 		AvatarURL:    profile.AvatarURL,
+		CurrentRoom:  profile.CurrentRoom,
 		MatchHistory: profile.MatchHistory,
 		Stats:        profile.Stats,
 	}, nil
@@ -250,6 +251,11 @@ func (s *Service) GetProfile(ctx context.Context, req dto.GetProfileRequest) (*d
 }
 
 func (s *Service) buildProfileResponse(ctx context.Context, user model.User) (*dto.GetProfileResponse, error) {
+	currentRoom, err := s.repo.GetCurrentRoomByUserID(ctx, user.ID.String())
+	if err != nil {
+		return nil, err
+	}
+
 	matches, err := s.repo.ListFinishedMatchesByUserID(ctx, user.ID.String())
 	if err != nil {
 		return nil, err
@@ -268,9 +274,23 @@ func (s *Service) buildProfileResponse(ctx context.Context, user model.User) (*d
 		Nickname:     user.Nickname,
 		Email:        user.Email,
 		AvatarURL:    user.AvatarURL,
+		CurrentRoom:  currentRoomResponse(currentRoom),
 		MatchHistory: history,
 		Stats:        statsBuilder.summary(),
 	}, nil
+}
+
+func currentRoomResponse(room *model.CurrentRoom) *dto.CurrentRoomResponse {
+	if room == nil {
+		return nil
+	}
+	return &dto.CurrentRoomResponse{
+		ID:       room.ID,
+		Name:     room.Name,
+		Status:   string(room.Status),
+		GameType: room.GameType,
+		MatchID:  room.MatchID,
+	}
 }
 
 type storedMatchResult struct {

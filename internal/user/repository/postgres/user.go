@@ -79,6 +79,44 @@ func (m *Repository) GetUserByID(ctx context.Context, userID string) (*model.Use
 	return user, nil
 }
 
+func (m *Repository) GetCurrentRoomByUserID(ctx context.Context, userID string) (*model.CurrentRoom, error) {
+	const op = "user.repository.postgres.GetCurrentRoomByUserID"
+
+	query := `
+		SELECT
+			r.id,
+			r.name,
+			r.status,
+			r.game_type,
+			m.id
+		FROM room_participants rp
+		JOIN rooms r ON r.id = rp.room_id
+		LEFT JOIN matches m ON m.room_id = r.id AND m.status = 'active'
+		WHERE rp.actor_id = $1
+		  AND rp.actor_type = 'user'
+		  AND r.status IN ('waiting', 'playing')
+		ORDER BY r.updated_at DESC
+		LIMIT 1
+	`
+
+	var room model.CurrentRoom
+	err := m.Conn.QueryRowContext(ctx, query, userID).Scan(
+		&room.ID,
+		&room.Name,
+		&room.Status,
+		&room.GameType,
+		&room.MatchID,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("%s: query current room: %w", op, err)
+	}
+
+	return &room, nil
+}
+
 func (m *Repository) ListFinishedMatchesByUserID(ctx context.Context, userID string) ([]model.MatchWithPlayers, error) {
 	const op = "user.repository.postgres.ListFinishedMatchesByUserID"
 

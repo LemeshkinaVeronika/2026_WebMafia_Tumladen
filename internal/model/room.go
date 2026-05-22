@@ -26,3 +26,11 @@ type Room struct {
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 }
+
+type CurrentRoom struct {
+	ID       string
+	Name     string
+	Status   RoomStatus
+	GameType string
+	MatchID  *string
+}
