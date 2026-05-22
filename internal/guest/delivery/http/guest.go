@@ -20,6 +20,9 @@ func (h *Handler) CreateGuestSession(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
+	if token, ok := middleware.BearerTokenFromRequest(r); ok {
+		req.PreviousToken = token
+	}
 
 	resp, err := h.service.CreateGuestSession(r.Context(), req)
 	if err != nil {

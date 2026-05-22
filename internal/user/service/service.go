@@ -26,12 +26,22 @@ type IStorage interface {
 	GetAvatarURL(ctx context.Context, objectName string) (string, error)
 }
 
-type Service struct {
-	repo          IRepository
-	storage       IStorage
-	tokenProvider *jwtprovider.JWTProvider
+type IGuestSessionCleaner interface {
+	DeleteGuestSession(ctx context.Context, actorID string) error
 }
 
-func New(repo IRepository, storage IStorage, tokenProvider *jwtprovider.JWTProvider) *Service {
-	return &Service{repo: repo, storage: storage, tokenProvider: tokenProvider}
+type Service struct {
+	repo                IRepository
+	storage             IStorage
+	tokenProvider       *jwtprovider.JWTProvider
+	guestSessionCleaner IGuestSessionCleaner
+}
+
+func New(repo IRepository, storage IStorage, tokenProvider *jwtprovider.JWTProvider, guestSessionCleaner IGuestSessionCleaner) *Service {
+	return &Service{
+		repo:                repo,
+		storage:             storage,
+		tokenProvider:       tokenProvider,
+		guestSessionCleaner: guestSessionCleaner,
+	}
 }

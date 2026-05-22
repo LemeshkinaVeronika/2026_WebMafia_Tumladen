@@ -38,14 +38,15 @@ import (
 )
 
 type App struct {
-	cfg     *Config
-	logger  logger.Logger
-	server  *http.Server
-	db      *sql.DB
-	ctx     context.Context
-	stop    context.CancelFunc
-	roomSvc *roomService.Service
-	ws      *internalws.Handler
+	cfg      *Config
+	logger   logger.Logger
+	server   *http.Server
+	db       *sql.DB
+	ctx      context.Context
+	stop     context.CancelFunc
+	guestSvc *guestService.Service
+	roomSvc  *roomService.Service
+	ws       *internalws.Handler
 }
 
 func New(ctx context.Context) (*App, error) {
@@ -94,12 +95,12 @@ func New(ctx context.Context) (*App, error) {
 	gamesFacade := gameService.NewFacade(gamesRegistry)
 
 	guestRepo := guestPostgres.New(db)
-	guestSvc := guestService.New(guestRepo, jwtProvider)
+	guestSvc := guestService.New(guestRepo, jwtProvider, cfg.JWTTTL)
 	guestHandler := guestHTTP.NewHandler(guestSvc)
 
 	userRepo := userPostgres.New(db)
 	avatarStorage := userStorage.New(minioClient, cfg.MinIO.AvatarBucket)
-	userSvc := userService.New(userRepo, avatarStorage, jwtProvider)
+	userSvc := userService.New(userRepo, avatarStorage, jwtProvider, guestSvc)
 	userHandler := userHTTP.NewHandler(userSvc, csrfManager, []string{
 		"image/jpeg",
 		"image/jpg",
@@ -163,14 +164,15 @@ func New(ctx context.Context) (*App, error) {
 	}
 
 	return &App{
-		cfg:     cfg,
-		logger:  logger,
-		server:  server,
-		db:      db,
-		ctx:     ctx,
-		stop:    stop,
-		roomSvc: roomSvc,
-		ws:      wsHandler,
+		cfg:      cfg,
+		logger:   logger,
+		server:   server,
+		db:       db,
+		ctx:      ctx,
+		stop:     stop,
+		guestSvc: guestSvc,
+		roomSvc:  roomSvc,
+		ws:       wsHandler,
 	}, nil
 }
 
@@ -229,6 +231,15 @@ func (a *App) runRoomCleanup() {
 		case <-a.ctx.Done():
 			return
 		case <-ticker.C:
+			affectedRoomIDs, err := a.guestSvc.CleanupExpiredGuestSessions(a.ctx)
+			if err != nil {
+				a.logger.Errorf("guest session cleanup failed error=%v", err)
+				continue
+			}
+			for _, roomID := range affectedRoomIDs {
+				a.ws.NotifyRoomState(a.ctx, roomID)
+			}
+
 			terminatedRoomIDs, err := a.roomSvc.CleanupStaleRooms(a.ctx, a.cfg.RoomWaitingCleanupTTL, a.cfg.RoomPlayingCleanupTTL)
 			if err != nil {
 				a.logger.Errorf("room cleanup failed error=%v", err)

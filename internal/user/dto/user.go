@@ -7,6 +7,7 @@ type RegisterRequest struct {
 	Email           string
 	Password        string
 	PasswordConfirm string
+	PreviousToken   string
 	Avatar          io.Reader
 	AvatarFilename  string
 	AvatarSize      int64
@@ -18,8 +19,9 @@ type RegisterResponse struct {
 }
 
 type LoginRequest struct {
-	Identifier string
-	Password   string
+	Identifier    string
+	Password      string
+	PreviousToken string
 }
 
 type LoginResponse struct {

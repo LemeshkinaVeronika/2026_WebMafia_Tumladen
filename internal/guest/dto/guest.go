@@ -1,7 +1,8 @@
 package dto
 
 type CreateGuestSessionRequest struct {
-	DisplayName string `json:"displayName"`
+	DisplayName   string `json:"displayName"`
+	PreviousToken string `json:"-"`
 }
 
 type GuestActorResponse struct {

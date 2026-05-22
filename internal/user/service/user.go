@@ -68,6 +68,10 @@ func (s *Service) Register(ctx context.Context, req dto.RegisterRequest) (*dto.R
 		return nil, mapRepositoryError(err)
 	}
 
+	if err := s.deletePreviousGuestSession(ctx, req.PreviousToken); err != nil {
+		return nil, err
+	}
+
 	token, err := s.tokenProvider.CreateUserToken(ctx, uuid.NewString(), user.ID.String(), user.Nickname)
 	if err != nil {
 		return nil, fmt.Errorf("[%s]: create token: %w", op, err)
@@ -102,6 +106,10 @@ func (s *Service) Login(ctx context.Context, req dto.LoginRequest) (*dto.LoginRe
 		return nil, fmt.Errorf("[%s]: invalid credentials: %w", op, ErrValidation)
 	}
 
+	if err := s.deletePreviousGuestSession(ctx, req.PreviousToken); err != nil {
+		return nil, err
+	}
+
 	token, err := s.tokenProvider.CreateUserToken(ctx, uuid.NewString(), user.ID.String(), user.Nickname)
 	if err != nil {
 		return nil, fmt.Errorf("[%s]: create token: %w", op, err)
@@ -111,6 +119,22 @@ func (s *Service) Login(ctx context.Context, req dto.LoginRequest) (*dto.LoginRe
 		Actor: userActorResponse(*user),
 		Token: token,
 	}, nil
+}
+
+func (s *Service) deletePreviousGuestSession(ctx context.Context, token string) error {
+	if s.guestSessionCleaner == nil || token == "" {
+		return nil
+	}
+
+	claims, err := s.tokenProvider.ParseToken(token)
+	if err != nil {
+		return nil
+	}
+	if claims.ActorType != string(model.ActorTypeGuest) || claims.ActorID == "" {
+		return nil
+	}
+
+	return s.guestSessionCleaner.DeleteGuestSession(ctx, claims.ActorID)
 }
 
 // Avatar Upload

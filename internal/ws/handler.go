@@ -1261,6 +1261,23 @@ func (h *Handler) NotifyMatchFinished(ctx context.Context, roomID string) {
 	messageHandler.broadcastMatchFinished(ctx, roomID)
 }
 
+func (h *Handler) NotifyRoomState(ctx context.Context, roomID string) {
+	messageHandler := &MessageHandler{
+		roomService:  h.roomService,
+		matchService: h.matchService,
+		games:        h.games,
+		node:         h.node,
+		registry:     h.registry,
+		logger:       h.logger,
+	}
+
+	roomState, err := h.roomService.GetRoomState(ctx, roomID)
+	if err != nil {
+		return
+	}
+	messageHandler.broadcastRoomState(ctx, roomID, roomState)
+}
+
 func (h *MessageHandler) sendServerMessage(client *centrifuge.Client, msg ServerMessage) {
 	data, err := json.Marshal(msg)
 	if err != nil {

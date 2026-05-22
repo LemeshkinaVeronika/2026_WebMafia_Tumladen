@@ -84,6 +84,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		Email:           req.Email,
 		Password:        req.Password,
 		PasswordConfirm: req.PasswordConfirm,
+		PreviousToken:   optionalBearerToken(r),
 		Avatar:          file,
 		AvatarFilename:  avatarFilename(header),
 		AvatarSize:      avatarSize,
@@ -113,8 +114,9 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp, err := h.svc.Login(r.Context(), dto.LoginRequest{
-		Identifier: req.Identifier,
-		Password:   req.Password,
+		Identifier:    req.Identifier,
+		Password:      req.Password,
+		PreviousToken: optionalBearerToken(r),
 	})
 	if err != nil {
 		log.With("identifier", req.Identifier, "passwordLength", len(req.Password), "error", err).Warnf("[%s]: login failed", op)
@@ -363,6 +365,14 @@ func avatarFilename(header *multipart.FileHeader) string {
 		return ""
 	}
 	return header.Filename
+}
+
+func optionalBearerToken(r *http.Request) string {
+	token, ok := middleware.BearerTokenFromRequest(r)
+	if !ok {
+		return ""
+	}
+	return token
 }
 
 func userActorFromRequest(r *http.Request) (model.Actor, bool) {
