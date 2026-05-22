@@ -72,6 +72,37 @@ func TestFinalFieldScoringCountsCompletedCityOnce(t *testing.T) {
 	}
 }
 
+func TestFinalFieldScoringTiesPlayersOnSameField(t *testing.T) {
+	engine := testEngine(t)
+
+	state := carcassonneDTO.GameState{
+		Players: []carcassonneDTO.PlayerState{
+			{ActorID: "actor-a", MeeplesLeft: 6},
+			{ActorID: "actor-b", MeeplesLeft: 6},
+		},
+		Board: []carcassonneDTO.PlacedTile{
+			{InstanceID: "city-1", TileID: "city_cap", X: 0, Y: 0, Rotation: 0},
+			{InstanceID: "city-2", TileID: "city_cap", X: 0, Y: -1, Rotation: 180},
+			{InstanceID: "field-1", TileID: "monastery", X: 0, Y: 1, Rotation: 0},
+		},
+		Meeples: []carcassonneDTO.PlacedMeeple{
+			{TileInstanceID: "city-1", ZoneID: "field_1", ActorID: "actor-a"},
+			{TileInstanceID: "field-1", ZoneID: "field_1", ActorID: "actor-b"},
+		},
+	}
+
+	if err := engine.scoreFinalFeatures(&state); err != nil {
+		t.Fatalf("scoreFinalFeatures() error = %v", err)
+	}
+
+	if got, want := state.Players[0].Score, 3; got != want {
+		t.Fatalf("actor-a final farmer score = %d, want %d", got, want)
+	}
+	if got, want := state.Players[1].Score, 3; got != want {
+		t.Fatalf("actor-b final farmer score = %d, want %d", got, want)
+	}
+}
+
 func TestRoadTJunctionBranchesAreSeparateFeatures(t *testing.T) {
 	engine := testEngine(t)
 

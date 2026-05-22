@@ -177,11 +177,16 @@ func (e *Engine) buildFieldGraph(state carcassonneDTO.GameState) (*fieldGraph, e
 
 	for _, meeple := range state.Meeples {
 		zoneRef := placedZoneRef{TileInstanceID: meeple.TileInstanceID, ZoneID: meeple.ZoneID}
+		countedRoots := make(map[placedFieldSegmentRef]struct{})
 		for _, segmentRef := range graph.segmentsByZoneRef[zoneRef] {
 			root, ok := graph.dsu.find(segmentRef)
 			if !ok {
 				continue
 			}
+			if _, ok := countedRoots[root]; ok {
+				continue
+			}
+			countedRoots[root] = struct{}{}
 			if graph.meeplesByRoot[root] == nil {
 				graph.meeplesByRoot[root] = make(map[string]int)
 			}
