@@ -285,11 +285,12 @@ func currentRoomResponse(room *model.CurrentRoom) *dto.CurrentRoomResponse {
 		return nil
 	}
 	return &dto.CurrentRoomResponse{
-		ID:       room.ID,
-		Name:     room.Name,
-		Status:   string(room.Status),
-		GameType: room.GameType,
-		MatchID:  room.MatchID,
+		ID:         room.ID,
+		Name:       room.Name,
+		InviteCode: room.InviteCode,
+		Status:     string(room.Status),
+		GameType:   room.GameType,
+		MatchID:    room.MatchID,
 	}
 }
 

@@ -84,11 +84,12 @@ type GetProfileResponse struct {
 }
 
 type CurrentRoomResponse struct {
-	ID       string  `json:"id"`
-	Name     string  `json:"name"`
-	Status   string  `json:"status"`
-	GameType string  `json:"gameType"`
-	MatchID  *string `json:"matchId,omitempty"`
+	ID         string  `json:"id"`
+	Name       string  `json:"name"`
+	InviteCode *string `json:"inviteCode,omitempty"`
+	Status     string  `json:"status"`
+	GameType   string  `json:"gameType"`
+	MatchID    *string `json:"matchId,omitempty"`
 }
 
 type MatchHistoryItem struct {

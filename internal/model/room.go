@@ -28,9 +28,10 @@ type Room struct {
 }
 
 type CurrentRoom struct {
-	ID       string
-	Name     string
-	Status   RoomStatus
-	GameType string
-	MatchID  *string
+	ID         string
+	Name       string
+	InviteCode *string
+	Status     RoomStatus
+	GameType   string
+	MatchID    *string
 }

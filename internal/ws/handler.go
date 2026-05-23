@@ -312,12 +312,15 @@ func (h *MessageHandler) OnDisconnect(client *centrifuge.Client, event centrifug
 	}
 
 	if state.RoomID != "" && !h.registry.HasLocalClientForActor(state.RoomID, state.Actor.ID) {
-		if err := h.roomService.MarkActorDisconnectedInActiveMatch(client.Context(), state.RoomID, state.Actor.ID); err != nil {
-			h.loggerFromContext(client.Context()).With("roomID", state.RoomID, "actorID", state.Actor.ID, "error", err).Warnf("mark actor disconnected failed")
+		disconnectCtx, cancel := context.WithTimeout(context.WithoutCancel(client.Context()), 5*time.Second)
+		defer cancel()
+
+		if err := h.roomService.MarkActorDisconnectedInActiveMatch(disconnectCtx, state.RoomID, state.Actor.ID); err != nil {
+			h.loggerFromContext(disconnectCtx).With("roomID", state.RoomID, "actorID", state.Actor.ID, "error", err).Warnf("mark actor disconnected failed")
 			return
 		}
 
-		h.broadcastActiveMatchStateIfExists(client.Context(), state.RoomID)
+		h.broadcastActiveMatchStateIfExists(disconnectCtx, state.RoomID)
 	}
 }
 

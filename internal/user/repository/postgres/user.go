@@ -86,6 +86,7 @@ func (m *Repository) GetCurrentRoomByUserID(ctx context.Context, userID string) 
 		SELECT
 			r.id,
 			r.name,
+			r.invite_code,
 			r.status,
 			r.game_type,
 			m.id
@@ -103,6 +104,7 @@ func (m *Repository) GetCurrentRoomByUserID(ctx context.Context, userID string) 
 	err := m.Conn.QueryRowContext(ctx, query, userID).Scan(
 		&room.ID,
 		&room.Name,
+		&room.InviteCode,
 		&room.Status,
 		&room.GameType,
 		&room.MatchID,
