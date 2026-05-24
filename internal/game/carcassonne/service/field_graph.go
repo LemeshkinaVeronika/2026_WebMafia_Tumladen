@@ -126,16 +126,11 @@ func (e *Engine) buildFieldGraph(state carcassonneDTO.GameState) (*fieldGraph, e
 				graph.segmentsByZoneRef[zoneRef] = append(graph.segmentsByZoneRef[zoneRef], ref)
 			}
 
-			for i := range segments {
-				for j := i + 1; j < len(segments); j++ {
-					if !fieldSegmentsConnectedInsideZone(segments[i], segments[j]) {
-						continue
-					}
-					graph.dsu.union(
-						placedFieldSegmentRef{TileInstanceID: tile.InstanceID, ZoneID: zone.ZoneID, Segment: segments[i]},
-						placedFieldSegmentRef{TileInstanceID: tile.InstanceID, ZoneID: zone.ZoneID, Segment: segments[j]},
-					)
-				}
+			for i := 1; i < len(segments); i++ {
+				graph.dsu.union(
+					placedFieldSegmentRef{TileInstanceID: tile.InstanceID, ZoneID: zone.ZoneID, Segment: segments[0]},
+					placedFieldSegmentRef{TileInstanceID: tile.InstanceID, ZoneID: zone.ZoneID, Segment: segments[i]},
+				)
 			}
 		}
 	}
@@ -219,12 +214,6 @@ func (g *fieldGraph) rootsForZone(ref placedZoneRef) []placedFieldSegmentRef {
 	}
 
 	return roots
-}
-
-func fieldSegmentsConnectedInsideZone(a, b carcassonneDTO.ZoneSegment) bool {
-	return a == carcassonneDTO.SegmentCenter ||
-		b == carcassonneDTO.SegmentCenter ||
-		segmentsAdjacent(a, b)
 }
 
 func (e *Engine) collectCompletedCityFeatures(state carcassonneDTO.GameState, completed map[placedZoneRef]struct{}) error {
