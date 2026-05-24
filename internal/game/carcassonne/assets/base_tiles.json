@@ -177,7 +177,7 @@
   {
     "tileId": "city_cap",
     "imageKey": "city_cap.webp",
-    "count": 2,
+    "count": 5,
     "edges": {
       "top": "city",
       "right": "field",
