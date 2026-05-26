@@ -200,12 +200,17 @@ func (e *Engine) placeMeeple(match *model.Match, state *carcassonneDTO.GameState
 	if !ok {
 		return gameService.ApplyActionResult{}, gameService.ErrInvalidMatchAction
 	}
+	segment := placementSegment(*zone, state.LastPlacedTile.Rotation)
+	if payload.Segment != "" && payload.Segment != segment {
+		return gameService.ApplyActionResult{}, gameService.ErrInvalidMatchAction
+	}
 
 	state.Meeples = append(state.Meeples, carcassonneDTO.PlacedMeeple{
 		TileInstanceID: state.LastPlacedTile.InstanceID,
 		ZoneID:         payload.ZoneID,
 		ActorID:        req.ActorID,
 		FeatureType:    zone.Type,
+		Segment:        segment,
 	})
 	for i := range state.Players {
 		if state.Players[i].ActorID == req.ActorID {

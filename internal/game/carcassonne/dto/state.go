@@ -58,10 +58,11 @@ type PlacedTile struct {
 }
 
 type PlacedMeeple struct {
-	TileInstanceID string   `json:"tileInstanceId"`
-	ZoneID         string   `json:"zoneId"`
-	ActorID        string   `json:"actorId"`
-	FeatureType    ZoneType `json:"featureType,omitempty"`
+	TileInstanceID string      `json:"tileInstanceId"`
+	ZoneID         string      `json:"zoneId"`
+	ActorID        string      `json:"actorId"`
+	FeatureType    ZoneType    `json:"featureType,omitempty"`
+	Segment        ZoneSegment `json:"segment,omitempty"`
 }
 
 type TileView struct {

@@ -108,6 +108,7 @@ func validateTileDefinitions(definitions []carcassonneDTO.TileDefinition) error 
 
 		seenZoneIDs := make(map[string]struct{}, len(def.Zones))
 		usedSegments := make(map[carcassonneDTO.ZoneSegment]string)
+		segmentTypes := make(map[carcassonneDTO.ZoneSegment]carcassonneDTO.ZoneType)
 
 		for _, zone := range def.Zones {
 			if zone.ZoneID == "" {
@@ -136,11 +137,24 @@ func validateTileDefinitions(definitions []carcassonneDTO.TileDefinition) error 
 					return fmt.Errorf("segment %q used by both %s and %s in tile %s", segment, ownerZoneID, zone.ZoneID, def.TileID)
 				}
 				usedSegments[segment] = zone.ZoneID
+				segmentTypes[segment] = zone.Type
 			}
 
 			if zone.HasPennant && zone.Type != carcassonneDTO.ZoneTypeCity {
 				return fmt.Errorf("zone %s in tile %s has pennant but is not city", zone.ZoneID, def.TileID)
 			}
+			if zone.Type == carcassonneDTO.ZoneTypeField && !zoneHasBoundarySegment(zone) {
+				return fmt.Errorf("field zone %s in tile %s must include a boundary segment", zone.ZoneID, def.TileID)
+			}
+		}
+
+		for _, segment := range boundarySegments() {
+			if _, ok := usedSegments[segment]; !ok {
+				return fmt.Errorf("boundary segment %q is not used in tile %s", segment, def.TileID)
+			}
+		}
+		if err := validateEdgeSegments(def, segmentTypes); err != nil {
+			return err
 		}
 
 		if def.TileID == "start_tile" && def.Count != 0 {
@@ -150,6 +164,91 @@ func validateTileDefinitions(definitions []carcassonneDTO.TileDefinition) error 
 
 	if _, ok := seenTileIDs["start_tile"]; !ok {
 		return fmt.Errorf("start_tile definition is required")
+	}
+
+	return nil
+}
+
+func zoneHasBoundarySegment(zone carcassonneDTO.ZoneDefinition) bool {
+	for _, segment := range zone.Segments {
+		if segment != carcassonneDTO.SegmentCenter {
+			return true
+		}
+	}
+	return false
+}
+
+func boundarySegments() []carcassonneDTO.ZoneSegment {
+	return []carcassonneDTO.ZoneSegment{
+		carcassonneDTO.SegmentTopLeft,
+		carcassonneDTO.SegmentTopCenter,
+		carcassonneDTO.SegmentTopRight,
+		carcassonneDTO.SegmentRightTop,
+		carcassonneDTO.SegmentRightCenter,
+		carcassonneDTO.SegmentRightBottom,
+		carcassonneDTO.SegmentBottomRight,
+		carcassonneDTO.SegmentBottomCenter,
+		carcassonneDTO.SegmentBottomLeft,
+		carcassonneDTO.SegmentLeftBottom,
+		carcassonneDTO.SegmentLeftCenter,
+		carcassonneDTO.SegmentLeftTop,
+	}
+}
+
+func validateEdgeSegments(def carcassonneDTO.TileDefinition, segmentTypes map[carcassonneDTO.ZoneSegment]carcassonneDTO.ZoneType) error {
+	edges := []struct {
+		edge     carcassonneDTO.EdgeType
+		segments []carcassonneDTO.ZoneSegment
+	}{
+		{
+			edge: def.Edges.Top,
+			segments: []carcassonneDTO.ZoneSegment{
+				carcassonneDTO.SegmentTopLeft,
+				carcassonneDTO.SegmentTopCenter,
+				carcassonneDTO.SegmentTopRight,
+			},
+		},
+		{
+			edge: def.Edges.Right,
+			segments: []carcassonneDTO.ZoneSegment{
+				carcassonneDTO.SegmentRightTop,
+				carcassonneDTO.SegmentRightCenter,
+				carcassonneDTO.SegmentRightBottom,
+			},
+		},
+		{
+			edge: def.Edges.Bottom,
+			segments: []carcassonneDTO.ZoneSegment{
+				carcassonneDTO.SegmentBottomRight,
+				carcassonneDTO.SegmentBottomCenter,
+				carcassonneDTO.SegmentBottomLeft,
+			},
+		},
+		{
+			edge: def.Edges.Left,
+			segments: []carcassonneDTO.ZoneSegment{
+				carcassonneDTO.SegmentLeftBottom,
+				carcassonneDTO.SegmentLeftCenter,
+				carcassonneDTO.SegmentLeftTop,
+			},
+		},
+	}
+
+	for _, edge := range edges {
+		if edge.edge == carcassonneDTO.EdgeTypeRoad {
+			center := edge.segments[1]
+			if segmentTypes[center] != carcassonneDTO.ZoneTypeRoad {
+				return fmt.Errorf("road edge center segment %q in tile %s must be road", center, def.TileID)
+			}
+			continue
+		}
+
+		expected := carcassonneDTO.ZoneType(edge.edge)
+		for _, segment := range edge.segments {
+			if segmentTypes[segment] != expected {
+				return fmt.Errorf("%s edge segment %q in tile %s must be %s", edge.edge, segment, def.TileID, expected)
+			}
+		}
 	}
 
 	return nil

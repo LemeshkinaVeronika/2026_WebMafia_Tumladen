@@ -223,6 +223,50 @@ func TestApplyActionStoresMeepleFeatureType(t *testing.T) {
 	if got, want := after.Meeples[0].FeatureType, carcassonneDTO.ZoneTypeRoad; got != want {
 		t.Fatalf("meeple featureType = %s, want %s", got, want)
 	}
+	if got, want := after.Meeples[0].Segment, carcassonneDTO.SegmentCenter; got != want {
+		t.Fatalf("meeple segment = %s, want %s", got, want)
+	}
+}
+
+func TestApplyActionRejectsMeepleSegmentMismatch(t *testing.T) {
+	engine := testEngine(t)
+
+	lastPlacedTile := carcassonneDTO.PlacedTile{
+		InstanceID: "drawn-tile",
+		TileID:     "city_curve_with_road_curve_shield",
+		X:          0,
+		Y:          0,
+		Rotation:   180,
+		PlacedBy:   "actor-a",
+		TurnNumber: 1,
+	}
+	state := carcassonneDTO.GameState{
+		Version:         1,
+		Phase:           carcassonneDTO.PhasePlaceMeeple,
+		TurnNumber:      1,
+		CurrentPlayerID: "actor-a",
+		Players: []carcassonneDTO.PlayerState{
+			{ActorID: "actor-a", MeeplesLeft: 7},
+		},
+		Board:          []carcassonneDTO.PlacedTile{lastPlacedTile},
+		LastPlacedTile: &lastPlacedTile,
+		Meeples:        []carcassonneDTO.PlacedMeeple{},
+	}
+	match := matchFromGameState(t, state)
+	players := []model.MatchPlayer{{MatchID: match.ID, ActorID: "actor-a"}}
+
+	_, err := engine.ApplyAction(t.Context(), match, players, gameService.ApplyActionRequest{
+		ActorID: "actor-a",
+		Action:  string(carcassonneDTO.ActionPlaceMeeple),
+		Payload: marshalPayload(t, carcassonneDTO.PlaceMeeplePayload{
+			RoomID:  match.RoomID,
+			ZoneID:  "field_2",
+			Segment: carcassonneDTO.SegmentRightBottom,
+		}),
+	})
+	if err != gameService.ErrInvalidMatchAction {
+		t.Fatalf("place meeple with unrotated segment error = %v, want ErrInvalidMatchAction", err)
+	}
 }
 
 func TestApplyTurnTimeoutPlacesFirstValidTileAndSkipsMeeple(t *testing.T) {

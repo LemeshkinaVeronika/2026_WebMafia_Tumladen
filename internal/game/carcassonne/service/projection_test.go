@@ -85,6 +85,9 @@ func TestBuildPublicStateExposesExplicitTurnDeckAndBoard(t *testing.T) {
 	if got, want := publicState.Meeples[0].FeatureType, carcassonneDTO.ZoneTypeCity; got != want {
 		t.Fatalf("meeple featureType = %s, want %s", got, want)
 	}
+	if got, want := publicState.Meeples[0].Segment, carcassonneDTO.SegmentBottomCenter; got != want {
+		t.Fatalf("meeple segment = %s, want %s", got, want)
+	}
 }
 
 func TestBuildPrivateStateExposesActionsAndGroupedPlacements(t *testing.T) {
@@ -204,6 +207,94 @@ func TestBuildPrivateStateExposesMeepleActionsAndZones(t *testing.T) {
 		if placement.ZoneID == "" || placement.FeatureType == "" || placement.Segment == "" {
 			t.Fatalf("invalid meeple placement hint: %#v", placement)
 		}
+	}
+}
+
+func TestBuildPrivateStateRotatesMeeplePlacementSegments(t *testing.T) {
+	engine := testEngine(t)
+
+	lastPlacedTile := carcassonneDTO.PlacedTile{
+		InstanceID: "tile-1",
+		TileID:     "city_curve_with_road_curve_shield",
+		X:          0,
+		Y:          0,
+		Rotation:   180,
+		PlacedBy:   "actor-a",
+		TurnNumber: 1,
+	}
+	state := carcassonneDTO.GameState{
+		Version:         1,
+		Phase:           carcassonneDTO.PhasePlaceMeeple,
+		CurrentPlayerID: "actor-a",
+		Players: []carcassonneDTO.PlayerState{
+			{ActorID: "actor-a", MeeplesLeft: 7},
+		},
+		Board:          []carcassonneDTO.PlacedTile{lastPlacedTile},
+		LastPlacedTile: &lastPlacedTile,
+	}
+
+	rawState, err := json.Marshal(state)
+	if err != nil {
+		t.Fatalf("marshal state: %v", err)
+	}
+
+	rawPrivate, err := engine.BuildPrivateState(&model.Match{GameState: model.JSONB(rawState)}, nil, "actor-a")
+	if err != nil {
+		t.Fatalf("BuildPrivateState() error = %v", err)
+	}
+
+	var privateState carcassonneDTO.PrivateGameState
+	if err := json.Unmarshal(rawPrivate, &privateState); err != nil {
+		t.Fatalf("unmarshal private state: %v", err)
+	}
+
+	for _, placement := range privateState.ValidMeeplePlacements {
+		if placement.ZoneID == "field_2" {
+			if got, want := placement.Segment, carcassonneDTO.SegmentLeftTop; got != want {
+				t.Fatalf("field_2 segment = %s, want rotated %s", got, want)
+			}
+			return
+		}
+	}
+	t.Fatal("field_2 meeple placement not found")
+}
+
+func TestBuildPublicStateBackfillsRotatedMeepleSegment(t *testing.T) {
+	engine := testEngine(t)
+
+	state := carcassonneDTO.GameState{
+		Version: 1,
+		Phase:   carcassonneDTO.PhasePlaceTile,
+		Players: []carcassonneDTO.PlayerState{
+			{ActorID: "actor-a", MeeplesLeft: 6},
+		},
+		Board: []carcassonneDTO.PlacedTile{
+			{InstanceID: "tile-1", TileID: "city_curve_with_road_curve_shield", X: 0, Y: 0, Rotation: 180},
+		},
+		Meeples: []carcassonneDTO.PlacedMeeple{
+			{TileInstanceID: "tile-1", ZoneID: "field_2", ActorID: "actor-a"},
+		},
+	}
+
+	rawState, err := json.Marshal(state)
+	if err != nil {
+		t.Fatalf("marshal state: %v", err)
+	}
+
+	rawPublic, err := engine.BuildPublicState(&model.Match{GameState: model.JSONB(rawState)}, nil)
+	if err != nil {
+		t.Fatalf("BuildPublicState() error = %v", err)
+	}
+
+	var publicState carcassonneDTO.PublicGameState
+	if err := json.Unmarshal(rawPublic, &publicState); err != nil {
+		t.Fatalf("unmarshal public state: %v", err)
+	}
+	if got, want := publicState.Meeples[0].FeatureType, carcassonneDTO.ZoneTypeField; got != want {
+		t.Fatalf("meeple featureType = %s, want %s", got, want)
+	}
+	if got, want := publicState.Meeples[0].Segment, carcassonneDTO.SegmentLeftTop; got != want {
+		t.Fatalf("meeple segment = %s, want rotated %s", got, want)
 	}
 }
 

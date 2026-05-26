@@ -8,8 +8,9 @@ type PlaceTilePayload struct {
 }
 
 type PlaceMeeplePayload struct {
-	RoomID string `json:"roomId"`
-	ZoneID string `json:"zoneId"`
+	RoomID  string      `json:"roomId"`
+	ZoneID  string      `json:"zoneId"`
+	Segment ZoneSegment `json:"segment,omitempty"`
 }
 
 type SkipMeeplePayload struct {

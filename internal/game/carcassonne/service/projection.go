@@ -93,28 +93,40 @@ func turnEndsAtView(turnStartedAt time.Time, state carcassonneDTO.GameState) *st
 func (e *Engine) publicMeeples(state carcassonneDTO.GameState) []carcassonneDTO.PlacedMeeple {
 	meeples := make([]carcassonneDTO.PlacedMeeple, 0, len(state.Meeples))
 	for _, meeple := range state.Meeples {
+		tile := placedTileByInstanceID(state.Board, meeple.TileInstanceID)
+		if tile == nil {
+			meeples = append(meeples, meeple)
+			continue
+		}
+		zone, ok := e.placedMeepleZone(*tile, meeple.ZoneID)
+		if !ok {
+			meeples = append(meeples, meeple)
+			continue
+		}
 		if meeple.FeatureType == "" {
-			meeple.FeatureType = e.meepleFeatureType(state, meeple)
+			meeple.FeatureType = zone.Type
+		}
+		if meeple.Segment == "" {
+			meeple.Segment = placementSegment(*zone, tile.Rotation)
 		}
 		meeples = append(meeples, meeple)
 	}
 	return meeples
 }
 
-func (e *Engine) meepleFeatureType(state carcassonneDTO.GameState, meeple carcassonneDTO.PlacedMeeple) carcassonneDTO.ZoneType {
-	tile := placedTileByInstanceID(state.Board, meeple.TileInstanceID)
-	if tile == nil {
-		return ""
-	}
+func (e *Engine) placedMeepleZone(tile carcassonneDTO.PlacedTile, zoneID string) (*carcassonneDTO.ZoneDefinition, bool) {
 	def, ok := e.catalog.Get(tile.TileID)
 	if !ok {
+		return nil, false
+	}
+	return findZone(def, zoneID)
+}
+
+func placementSegment(zone carcassonneDTO.ZoneDefinition, rotation int) carcassonneDTO.ZoneSegment {
+	if len(zone.Segments) == 0 {
 		return ""
 	}
-	zone, ok := findZone(def, meeple.ZoneID)
-	if !ok {
-		return ""
-	}
-	return zone.Type
+	return rotateSegment(zone.Segments[0], rotation)
 }
 
 func publicMatchResult(match *model.Match) (*carcassonneDTO.MatchResult, error) {
@@ -261,14 +273,10 @@ func (e *Engine) validMeeplePlacements(state carcassonneDTO.GameState, actorID s
 	placements := make([]carcassonneDTO.ValidMeeplePlacement, 0, len(def.Zones))
 	for _, zone := range def.Zones {
 		if e.canPlaceMeeple(state, actorID, zone.ZoneID) {
-			segment := carcassonneDTO.ZoneSegment("")
-			if len(zone.Segments) > 0 {
-				segment = zone.Segments[0]
-			}
 			placements = append(placements, carcassonneDTO.ValidMeeplePlacement{
 				ZoneID:      zone.ZoneID,
 				FeatureType: zone.Type,
-				Segment:     segment,
+				Segment:     placementSegment(zone, state.LastPlacedTile.Rotation),
 			})
 		}
 	}
