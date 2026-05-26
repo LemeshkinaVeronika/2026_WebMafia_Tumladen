@@ -187,6 +187,9 @@ func (e *Engine) placeMeeple(match *model.Match, state *carcassonneDTO.GameState
 	if payload.RoomID != "" && payload.RoomID != match.RoomID {
 		return gameService.ApplyActionResult{}, gameService.ErrInvalidMatchAction
 	}
+	if payload.TileInstanceID != "" && payload.TileInstanceID != state.LastPlacedTile.InstanceID {
+		return gameService.ApplyActionResult{}, gameService.ErrInvalidMatchAction
+	}
 
 	if !e.canPlaceMeeple(*state, req.ActorID, payload.ZoneID) {
 		return gameService.ApplyActionResult{}, gameService.ErrInvalidMatchAction

@@ -269,6 +269,47 @@ func TestApplyActionRejectsMeepleSegmentMismatch(t *testing.T) {
 	}
 }
 
+func TestApplyActionRejectsMeepleTileMismatch(t *testing.T) {
+	engine := testEngine(t)
+
+	lastPlacedTile := carcassonneDTO.PlacedTile{
+		InstanceID: "drawn-tile",
+		TileID:     "road_straight",
+		X:          0,
+		Y:          -1,
+		Rotation:   0,
+		PlacedBy:   "actor-a",
+		TurnNumber: 1,
+	}
+	state := carcassonneDTO.GameState{
+		Version:         1,
+		Phase:           carcassonneDTO.PhasePlaceMeeple,
+		TurnNumber:      1,
+		CurrentPlayerID: "actor-a",
+		Players: []carcassonneDTO.PlayerState{
+			{ActorID: "actor-a", MeeplesLeft: 7},
+		},
+		Board:          []carcassonneDTO.PlacedTile{lastPlacedTile},
+		LastPlacedTile: &lastPlacedTile,
+		Meeples:        []carcassonneDTO.PlacedMeeple{},
+	}
+	match := matchFromGameState(t, state)
+	players := []model.MatchPlayer{{MatchID: match.ID, ActorID: "actor-a"}}
+
+	_, err := engine.ApplyAction(t.Context(), match, players, gameService.ApplyActionRequest{
+		ActorID: "actor-a",
+		Action:  string(carcassonneDTO.ActionPlaceMeeple),
+		Payload: marshalPayload(t, carcassonneDTO.PlaceMeeplePayload{
+			RoomID:         match.RoomID,
+			TileInstanceID: "other-tile",
+			ZoneID:         "road_1",
+		}),
+	})
+	if err != gameService.ErrInvalidMatchAction {
+		t.Fatalf("place meeple with wrong tile error = %v, want ErrInvalidMatchAction", err)
+	}
+}
+
 func TestApplyTurnTimeoutPlacesFirstValidTileAndSkipsMeeple(t *testing.T) {
 	engine := testEngine(t)
 

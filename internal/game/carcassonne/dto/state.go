@@ -101,9 +101,12 @@ type ValidTilePlacement struct {
 }
 
 type ValidMeeplePlacement struct {
-	ZoneID      string      `json:"zoneId"`
-	FeatureType ZoneType    `json:"featureType"`
-	Segment     ZoneSegment `json:"segment"`
+	TileInstanceID string      `json:"tileInstanceId"`
+	X              int         `json:"x"`
+	Y              int         `json:"y"`
+	ZoneID         string      `json:"zoneId"`
+	FeatureType    ZoneType    `json:"featureType"`
+	Segment        ZoneSegment `json:"segment"`
 }
 
 type MatchResult struct {

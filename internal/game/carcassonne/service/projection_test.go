@@ -204,6 +204,9 @@ func TestBuildPrivateStateExposesMeepleActionsAndZones(t *testing.T) {
 		t.Fatal("validMeeplePlacements is empty")
 	}
 	for _, placement := range privateState.ValidMeeplePlacements {
+		if placement.TileInstanceID != lastPlacedTile.InstanceID || placement.X != lastPlacedTile.X || placement.Y != lastPlacedTile.Y {
+			t.Fatalf("meeple placement is not anchored to last tile: %#v", placement)
+		}
 		if placement.ZoneID == "" || placement.FeatureType == "" || placement.Segment == "" {
 			t.Fatalf("invalid meeple placement hint: %#v", placement)
 		}
@@ -250,6 +253,9 @@ func TestBuildPrivateStateRotatesMeeplePlacementSegments(t *testing.T) {
 
 	for _, placement := range privateState.ValidMeeplePlacements {
 		if placement.ZoneID == "field_2" {
+			if placement.TileInstanceID != lastPlacedTile.InstanceID || placement.X != lastPlacedTile.X || placement.Y != lastPlacedTile.Y {
+				t.Fatalf("field_2 placement anchor = %#v, want last placed tile", placement)
+			}
 			if got, want := placement.Segment, carcassonneDTO.SegmentLeftTop; got != want {
 				t.Fatalf("field_2 segment = %s, want rotated %s", got, want)
 			}

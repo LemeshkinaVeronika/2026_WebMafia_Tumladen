@@ -274,9 +274,12 @@ func (e *Engine) validMeeplePlacements(state carcassonneDTO.GameState, actorID s
 	for _, zone := range def.Zones {
 		if e.canPlaceMeeple(state, actorID, zone.ZoneID) {
 			placements = append(placements, carcassonneDTO.ValidMeeplePlacement{
-				ZoneID:      zone.ZoneID,
-				FeatureType: zone.Type,
-				Segment:     placementSegment(zone, state.LastPlacedTile.Rotation),
+				TileInstanceID: state.LastPlacedTile.InstanceID,
+				X:              state.LastPlacedTile.X,
+				Y:              state.LastPlacedTile.Y,
+				ZoneID:         zone.ZoneID,
+				FeatureType:    zone.Type,
+				Segment:        placementSegment(zone, state.LastPlacedTile.Rotation),
 			})
 		}
 	}
