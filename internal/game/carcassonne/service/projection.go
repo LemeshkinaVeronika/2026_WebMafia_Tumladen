@@ -126,7 +126,45 @@ func placementSegment(zone carcassonneDTO.ZoneDefinition, rotation int) carcasso
 	if len(zone.Segments) == 0 {
 		return ""
 	}
-	return rotateSegment(zone.Segments[0], rotation)
+
+	segments := rotateSegments(zone.Segments, rotation)
+	slices.SortFunc(segments, func(a, b carcassonneDTO.ZoneSegment) int {
+		return segmentPlacementRank(a) - segmentPlacementRank(b)
+	})
+	return segments[0]
+}
+
+func segmentPlacementRank(segment carcassonneDTO.ZoneSegment) int {
+	switch segment {
+	case carcassonneDTO.SegmentCenter:
+		return 0
+	case carcassonneDTO.SegmentTopCenter:
+		return 10
+	case carcassonneDTO.SegmentRightCenter:
+		return 20
+	case carcassonneDTO.SegmentBottomCenter:
+		return 30
+	case carcassonneDTO.SegmentLeftCenter:
+		return 40
+	case carcassonneDTO.SegmentTopLeft:
+		return 50
+	case carcassonneDTO.SegmentTopRight:
+		return 60
+	case carcassonneDTO.SegmentRightTop:
+		return 70
+	case carcassonneDTO.SegmentRightBottom:
+		return 80
+	case carcassonneDTO.SegmentBottomRight:
+		return 90
+	case carcassonneDTO.SegmentBottomLeft:
+		return 100
+	case carcassonneDTO.SegmentLeftBottom:
+		return 110
+	case carcassonneDTO.SegmentLeftTop:
+		return 120
+	default:
+		return 1000
+	}
 }
 
 func publicMatchResult(match *model.Match) (*carcassonneDTO.MatchResult, error) {

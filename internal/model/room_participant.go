@@ -3,9 +3,10 @@ package model
 import "time"
 
 type RoomParticipant struct {
-	RoomID      string
-	ActorID     string
-	ActorType   ActorType
-	DisplayName string
-	JoinedAt    time.Time
+	RoomID        string
+	ActorID       string
+	ActorType     ActorType
+	DisplayName   string
+	BotDifficulty string
+	JoinedAt      time.Time
 }

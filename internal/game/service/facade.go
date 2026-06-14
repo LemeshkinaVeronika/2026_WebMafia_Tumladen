@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/webmafia/tumladan/internal/model"
 )
@@ -58,6 +59,34 @@ func (f *Facade) ApplyTurnTimeout(ctx context.Context, match *model.Match, playe
 	}
 
 	return engine.ApplyTurnTimeout(ctx, match, players)
+}
+
+func (f *Facade) BuildBotAction(match *model.Match, actor model.MatchPlayer) (ApplyActionRequest, error) {
+	engine, err := f.registry.Get(match.GameType)
+	if err != nil {
+		return ApplyActionRequest{}, err
+	}
+
+	botEngine, ok := engine.(BotEngine)
+	if !ok {
+		return ApplyActionRequest{}, ErrInvalidMatchAction
+	}
+
+	return botEngine.BuildBotAction(match, actor)
+}
+
+func (f *Facade) BuildRoomBotParticipants(gameType string, roomID string, settings model.JSONB, joinedAt time.Time) ([]model.RoomParticipant, error) {
+	engine, err := f.registry.Get(gameType)
+	if err != nil {
+		return nil, err
+	}
+
+	provider, ok := engine.(RoomBotProvider)
+	if !ok {
+		return nil, nil
+	}
+
+	return provider.BuildRoomBotParticipants(roomID, settings, joinedAt)
 }
 
 func (f *Facade) BuildPublicState(match *model.Match, players []model.MatchPlayer) (json.RawMessage, error) {

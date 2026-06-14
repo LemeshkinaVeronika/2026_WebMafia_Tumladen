@@ -7,6 +7,7 @@ type MatchPlayer struct {
 	ActorID        string
 	ActorType      ActorType
 	DisplayName    string
+	BotDifficulty  string
 	AvatarURL      string
 	Seat           int
 	DisconnectedAt *time.Time

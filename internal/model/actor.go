@@ -5,6 +5,7 @@ type ActorType string
 const (
 	ActorTypeGuest ActorType = "guest"
 	ActorTypeUser  ActorType = "user"
+	ActorTypeBot   ActorType = "bot"
 )
 
 type Actor struct {

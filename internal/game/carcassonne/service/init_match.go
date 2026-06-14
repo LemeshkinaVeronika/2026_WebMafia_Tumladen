@@ -25,11 +25,12 @@ func (e *Engine) BuildInitialMatch(room *model.Room, participants []model.RoomPa
 
 	for i, participant := range participants {
 		players = append(players, model.MatchPlayer{
-			MatchID:     matchID,
-			ActorID:     participant.ActorID,
-			ActorType:   participant.ActorType,
-			DisplayName: participant.DisplayName,
-			Seat:        i,
+			MatchID:       matchID,
+			ActorID:       participant.ActorID,
+			ActorType:     participant.ActorType,
+			DisplayName:   participant.DisplayName,
+			BotDifficulty: participant.BotDifficulty,
+			Seat:          i,
 		})
 
 		statePlayers = append(statePlayers, carcassonneDTO.PlayerState{

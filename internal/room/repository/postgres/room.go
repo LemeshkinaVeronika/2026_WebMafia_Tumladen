@@ -175,7 +175,7 @@ func (r *Repository) GetByID(ctx context.Context, roomID string) (*model.Room, e
 	return &room, nil
 }
 
-func (r *Repository) UpdateSettings(ctx context.Context, roomID, name string, isPrivate bool, gameType string, maxPlayers int, settings model.JSONB) (*model.Room, []model.RoomParticipant, error) {
+func (r *Repository) UpdateSettings(ctx context.Context, roomID, name string, isPrivate bool, gameType string, maxPlayers int, settings model.JSONB, reservedSlots int) (*model.Room, []model.RoomParticipant, error) {
 	const op = "room.repository.postgres.UpdateRoomSettings"
 
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -196,7 +196,7 @@ func (r *Repository) UpdateSettings(ctx context.Context, roomID, name string, is
 		return nil, nil, fmt.Errorf("[%s]: list participants failed: %w", op, err)
 	}
 
-	if len(participants) > maxPlayers {
+	if len(participants)+reservedSlots > maxPlayers {
 		return nil, nil, ErrMaxPlayersLessThanParticipants
 	}
 
@@ -263,7 +263,7 @@ func (r *Repository) UpdateStatus(ctx context.Context, roomID string, status mod
 	return nil
 }
 
-func (r *Repository) JoinRoom(ctx context.Context, roomID, actorID string, actorType model.ActorType, displayName string) (*model.Room, []model.RoomParticipant, error) {
+func (r *Repository) JoinRoom(ctx context.Context, roomID, actorID string, actorType model.ActorType, displayName string, reservedSlots int) (*model.Room, []model.RoomParticipant, error) {
 	const op = "room.repository.postgres.JoinRoom"
 
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -296,7 +296,7 @@ func (r *Repository) JoinRoom(ctx context.Context, roomID, actorID string, actor
 		return nil, nil, ErrRoomNotJoinable
 	}
 
-	if !alreadyInRoom && len(participants) >= room.MaxPlayers {
+	if !alreadyInRoom && len(participants)+reservedSlots >= room.MaxPlayers {
 		return nil, nil, ErrRoomFull
 	}
 
@@ -352,12 +352,16 @@ func (r *Repository) StartRoomWithMatch(ctx context.Context, roomID string, matc
 		return nil, nil, fmt.Errorf("[%s]: list participants failed: %w", op, err)
 	}
 
-	if len(participants) < 2 {
+	if len(participants) == 0 || len(players) < 2 {
 		return nil, nil, ErrNotEnoughPlayers
 	}
 
-	if len(participants) > room.MaxPlayers {
+	if len(players) > room.MaxPlayers {
 		return nil, nil, ErrRoomFull
+	}
+
+	if !matchPlayersMatchParticipants(players, participants) {
+		return nil, nil, ErrRoomNotReady
 	}
 
 	if err := r.createMatchTx(ctx, tx, match); err != nil {
@@ -390,6 +394,25 @@ func (r *Repository) StartRoomWithMatch(ctx context.Context, roomID string, matc
 	}
 
 	return room, participants, nil
+}
+
+func matchPlayersMatchParticipants(players []model.MatchPlayer, participants []model.RoomParticipant) bool {
+	participantsByActorID := make(map[string]struct{}, len(participants))
+	for _, participant := range participants {
+		participantsByActorID[participant.ActorID] = struct{}{}
+	}
+
+	realPlayerCount := 0
+	for _, player := range players {
+		if player.ActorType == model.ActorTypeBot {
+			continue
+		}
+		if _, ok := participantsByActorID[player.ActorID]; !ok {
+			return false
+		}
+		realPlayerCount++
+	}
+	return realPlayerCount == len(participants)
 }
 
 func (r *Repository) TerminateActiveMatch(

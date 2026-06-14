@@ -62,8 +62,8 @@ func (r *Repository) createMatchTx(ctx context.Context, tx *sql.Tx, match *model
 
 func (r *Repository) createMatchPlayersTx(ctx context.Context, tx *sql.Tx, players []model.MatchPlayer) error {
 	query := `
-		INSERT INTO match_players (match_id, actor_id, actor_type, display_name, seat)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO match_players (match_id, actor_id, actor_type, display_name, bot_difficulty, seat)
+		VALUES ($1, $2, $3, $4, $5, $6)
 	`
 
 	for _, player := range players {
@@ -74,6 +74,7 @@ func (r *Repository) createMatchPlayersTx(ctx context.Context, tx *sql.Tx, playe
 			player.ActorID,
 			player.ActorType,
 			player.DisplayName,
+			player.BotDifficulty,
 			player.Seat,
 		); err != nil {
 			return err
@@ -167,9 +168,9 @@ func (r *Repository) getMatchByID(ctx context.Context, matchID string) (*model.M
 
 func (r *Repository) listMatchPlayers(ctx context.Context, matchID string) ([]model.MatchPlayer, error) {
 	query := `
-		SELECT mp.match_id, mp.actor_id, mp.actor_type, mp.display_name, COALESCE(u.avatar_url, ''), mp.seat, mp.disconnected_at
+		SELECT mp.match_id, mp.actor_id, mp.actor_type, mp.display_name, COALESCE(mp.bot_difficulty, ''), COALESCE(u.avatar_url, ''), mp.seat, mp.disconnected_at
 		FROM match_players mp
-		LEFT JOIN users u ON mp.actor_type = 'user' AND u.id = mp.actor_id
+		LEFT JOIN users u ON mp.actor_type = 'user' AND u.id::TEXT = mp.actor_id
 		WHERE mp.match_id = $1
 		ORDER BY mp.seat ASC
 	`
@@ -188,6 +189,7 @@ func (r *Repository) listMatchPlayers(ctx context.Context, matchID string) ([]mo
 			&player.ActorID,
 			&player.ActorType,
 			&player.DisplayName,
+			&player.BotDifficulty,
 			&player.AvatarURL,
 			&player.Seat,
 			&player.DisconnectedAt,

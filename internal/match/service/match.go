@@ -13,6 +13,10 @@ import (
 	roomDTO "github.com/webmafia/tumladan/internal/room/dto"
 )
 
+const (
+	maxBotTurnSteps = 32
+)
+
 func matchToResponse(match model.Match, players []model.MatchPlayer) dto.MatchResponse {
 	resp := dto.MatchResponse{
 		ID:        match.ID,
@@ -45,6 +49,7 @@ func matchToResponse(match model.Match, players []model.MatchPlayer) dto.MatchRe
 			ActorID:        player.ActorID,
 			ActorType:      string(player.ActorType),
 			DisplayName:    player.DisplayName,
+			BotDifficulty:  player.BotDifficulty,
 			AvatarURL:      player.AvatarURL,
 			Seat:           player.Seat,
 			IsDisconnected: player.DisconnectedAt != nil,
@@ -92,32 +97,15 @@ func (s *Service) ApplyAction(ctx context.Context, req dto.ApplyMatchActionReque
 		return nil, mapGameMatchError(err)
 	}
 
-	if actionResult.NextStatus == model.MatchStatusFinished {
-		if s.terminator == nil {
-			return nil, ErrInvalidMatchAction
-		}
-
-		if err := s.terminator.FinishRoomMatch(ctx, roomDTO.FinishRoomMatchRequest{
-			ActorID:   &req.ActorID,
-			RoomID:    req.RoomID,
-			Reason:    string(model.MatchTerminationReasonNormalCompletion),
-			GameState: json.RawMessage(actionResult.NextState),
-			Result:    json.RawMessage(resultOrNull(actionResult.Result)),
-		}); err != nil {
-			return nil, err
-		}
-
+	finished, err := s.persistActionResult(ctx, req.RoomID, req.ActorID, match, actionResult)
+	if err != nil {
+		return nil, err
+	}
+	if finished {
 		return s.GetLastByRoomID(ctx, req.RoomID)
 	}
 
-	if err := s.repo.UpdateState(ctx, match.ID, actionResult.NextState, actionResult.NextStatus, actionResult.Result); err != nil {
-		if errors.Is(err, matchPostgres.ErrNotFound) {
-			return nil, ErrMatchNotFound
-		}
-		return nil, err
-	}
-
-	return s.GetActiveByRoomID(ctx, req.RoomID)
+	return s.applyAutomaticBotTurns(ctx, req.RoomID, match, players)
 }
 
 func (s *Service) ApplyTurnTimeout(ctx context.Context, req dto.ApplyTurnTimeoutRequest) (*dto.MatchResponse, error) {
@@ -144,32 +132,121 @@ func (s *Service) ApplyTurnTimeout(ctx context.Context, req dto.ApplyTurnTimeout
 		return nil, mapGameMatchError(err)
 	}
 
+	finished, err := s.persistActionResult(ctx, req.RoomID, req.ExpectedActorID, match, actionResult)
+	if err != nil {
+		return nil, err
+	}
+	if finished {
+		return s.GetLastByRoomID(ctx, req.RoomID)
+	}
+
+	return s.applyAutomaticBotTurns(ctx, req.RoomID, match, players)
+}
+
+func (s *Service) persistActionResult(
+	ctx context.Context,
+	roomID string,
+	actorID string,
+	match *model.Match,
+	actionResult gameService.ApplyActionResult,
+) (bool, error) {
 	if actionResult.NextStatus == model.MatchStatusFinished {
 		if s.terminator == nil {
-			return nil, ErrInvalidMatchAction
+			return false, ErrInvalidMatchAction
 		}
 
 		if err := s.terminator.FinishRoomMatch(ctx, roomDTO.FinishRoomMatchRequest{
-			ActorID:   &req.ExpectedActorID,
-			RoomID:    req.RoomID,
+			ActorID:   &actorID,
+			RoomID:    roomID,
 			Reason:    string(model.MatchTerminationReasonNormalCompletion),
 			GameState: json.RawMessage(actionResult.NextState),
 			Result:    json.RawMessage(resultOrNull(actionResult.Result)),
 		}); err != nil {
-			return nil, err
+			return false, err
 		}
 
-		return s.GetLastByRoomID(ctx, req.RoomID)
+		match.GameState = actionResult.NextState
+		match.Status = actionResult.NextStatus
+		match.Result = actionResult.Result
+		return true, nil
 	}
 
 	if err := s.repo.UpdateState(ctx, match.ID, actionResult.NextState, actionResult.NextStatus, actionResult.Result); err != nil {
 		if errors.Is(err, matchPostgres.ErrNotFound) {
-			return nil, ErrMatchNotFound
+			return false, ErrMatchNotFound
 		}
-		return nil, err
+		return false, err
 	}
 
-	return s.GetActiveByRoomID(ctx, req.RoomID)
+	match.GameState = actionResult.NextState
+	match.Status = actionResult.NextStatus
+	match.Result = actionResult.Result
+	return false, nil
+}
+
+func (s *Service) applyAutomaticBotTurns(
+	ctx context.Context,
+	roomID string,
+	match *model.Match,
+	players []model.MatchPlayer,
+) (*dto.MatchResponse, error) {
+	for step := 0; step < maxBotTurnSteps; step++ {
+		actorID, ok := currentTurnActorID(match)
+		if !ok {
+			return s.GetActiveByRoomID(ctx, roomID)
+		}
+
+		player, ok := currentTurnBotPlayer(players, actorID)
+		if !ok {
+			return s.GetActiveByRoomID(ctx, roomID)
+		}
+
+		req, err := s.games.BuildBotAction(match, player)
+		if err != nil {
+			return nil, mapGameMatchError(err)
+		}
+
+		actionResult, err := s.games.ApplyAction(ctx, match, players, req)
+		if err != nil {
+			return nil, mapGameMatchError(err)
+		}
+
+		finished, err := s.persistActionResult(ctx, roomID, actorID, match, actionResult)
+		if err != nil {
+			return nil, err
+		}
+		if finished {
+			return s.GetLastByRoomID(ctx, roomID)
+		}
+	}
+
+	return nil, ErrInvalidMatchAction
+}
+
+func currentTurnActorID(match *model.Match) (string, bool) {
+	var state struct {
+		Phase           string `json:"phase"`
+		CurrentPlayerID string `json:"currentPlayerId"`
+	}
+	if match == nil || json.Unmarshal(match.GameState, &state) != nil {
+		return "", false
+	}
+	if state.CurrentPlayerID == "" {
+		return "", false
+	}
+	if state.Phase != "place_tile" && state.Phase != "place_meeple" {
+		return "", false
+	}
+	return state.CurrentPlayerID, true
+}
+
+func currentTurnBotPlayer(players []model.MatchPlayer, actorID string) (model.MatchPlayer, bool) {
+	for _, player := range players {
+		if player.ActorID == actorID && player.ActorType == model.ActorTypeBot {
+			return player, true
+		}
+	}
+	return model.MatchPlayer{}, false
 }
 
 func matchesExpectedTimeoutState(match *model.Match, req dto.ApplyTurnTimeoutRequest) bool {

@@ -115,8 +115,8 @@ func (r *Repository) createMatchTx(ctx context.Context, tx *sql.Tx, match *model
 
 func (r *Repository) createMatchPlayersTx(ctx context.Context, tx *sql.Tx, players []model.MatchPlayer) error {
 	query := `
-		INSERT INTO match_players (match_id, actor_id, actor_type, display_name, seat, disconnected_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO match_players (match_id, actor_id, actor_type, display_name, bot_difficulty, seat, disconnected_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`
 
 	for _, player := range players {
@@ -127,6 +127,7 @@ func (r *Repository) createMatchPlayersTx(ctx context.Context, tx *sql.Tx, playe
 			player.ActorID,
 			player.ActorType,
 			player.DisplayName,
+			player.BotDifficulty,
 			player.Seat,
 			player.DisconnectedAt,
 		); err != nil {
@@ -174,9 +175,9 @@ func (r *Repository) getActiveMatchByRoomIDForUpdate(ctx context.Context, tx *sq
 
 func (r *Repository) listMatchPlayersTx(ctx context.Context, tx *sql.Tx, matchID string) ([]model.MatchPlayer, error) {
 	query := `
-		SELECT mp.match_id, mp.actor_id, mp.actor_type, mp.display_name, COALESCE(u.avatar_url, ''), mp.seat, mp.disconnected_at
+		SELECT mp.match_id, mp.actor_id, mp.actor_type, mp.display_name, COALESCE(mp.bot_difficulty, ''), COALESCE(u.avatar_url, ''), mp.seat, mp.disconnected_at
 		FROM match_players mp
-		LEFT JOIN users u ON mp.actor_type = 'user' AND u.id = mp.actor_id
+		LEFT JOIN users u ON mp.actor_type = 'user' AND u.id::TEXT = mp.actor_id
 		WHERE mp.match_id = $1
 		ORDER BY mp.seat ASC
 	`
@@ -195,6 +196,7 @@ func (r *Repository) listMatchPlayersTx(ctx context.Context, tx *sql.Tx, matchID
 			&player.ActorID,
 			&player.ActorType,
 			&player.DisplayName,
+			&player.BotDifficulty,
 			&player.AvatarURL,
 			&player.Seat,
 			&player.DisconnectedAt,

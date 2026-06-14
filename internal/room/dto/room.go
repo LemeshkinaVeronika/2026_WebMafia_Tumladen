@@ -71,10 +71,11 @@ type RoomResponse struct {
 }
 
 type ParticipantResponse struct {
-	ActorID     string `json:"actorId"`
-	ActorType   string `json:"actorType"`
-	DisplayName string `json:"displayName"`
-	JoinedAt    string `json:"joinedAt"`
+	ActorID       string `json:"actorId"`
+	ActorType     string `json:"actorType"`
+	DisplayName   string `json:"displayName"`
+	BotDifficulty string `json:"botDifficulty,omitempty"`
+	JoinedAt      string `json:"joinedAt"`
 }
 
 type ListPublicRoomsResponse struct {

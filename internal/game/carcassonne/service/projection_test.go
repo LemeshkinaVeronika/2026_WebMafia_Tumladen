@@ -256,7 +256,7 @@ func TestBuildPrivateStateRotatesMeeplePlacementSegments(t *testing.T) {
 			if placement.TileInstanceID != lastPlacedTile.InstanceID || placement.X != lastPlacedTile.X || placement.Y != lastPlacedTile.Y {
 				t.Fatalf("field_2 placement anchor = %#v, want last placed tile", placement)
 			}
-			if got, want := placement.Segment, carcassonneDTO.SegmentLeftTop; got != want {
+			if got, want := placement.Segment, carcassonneDTO.SegmentTopRight; got != want {
 				t.Fatalf("field_2 segment = %s, want rotated %s", got, want)
 			}
 			return
@@ -299,7 +299,7 @@ func TestBuildPublicStateBackfillsRotatedMeepleSegment(t *testing.T) {
 	if got, want := publicState.Meeples[0].FeatureType, carcassonneDTO.ZoneTypeField; got != want {
 		t.Fatalf("meeple featureType = %s, want %s", got, want)
 	}
-	if got, want := publicState.Meeples[0].Segment, carcassonneDTO.SegmentLeftTop; got != want {
+	if got, want := publicState.Meeples[0].Segment, carcassonneDTO.SegmentTopRight; got != want {
 		t.Fatalf("meeple segment = %s, want rotated %s", got, want)
 	}
 }

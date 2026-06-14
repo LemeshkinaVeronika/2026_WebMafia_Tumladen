@@ -22,7 +22,10 @@ const (
 	defaultMaxPlayers = 2
 )
 
-func roomToResponse(room model.Room) dto.RoomResponse {
+func (s *Service) roomToResponse(room model.Room) dto.RoomResponse {
+	bots := s.roomBotParticipants(room)
+	playersCount := room.PlayersCount + len(bots)
+	canStart := room.Status == model.RoomStatusWaiting && room.PlayersCount > 0 && playersCount >= 2
 	return dto.RoomResponse{
 		ID:             room.ID,
 		Name:           room.Name,
@@ -34,34 +37,62 @@ func roomToResponse(room model.Room) dto.RoomResponse {
 		GameType:       room.GameType,
 		MaxPlayers:     room.MaxPlayers,
 		Settings:       json.RawMessage(room.Settings),
-		PlayersCount:   room.PlayersCount,
-		CanStart:       room.Status == model.RoomStatusWaiting && room.PlayersCount >= 2,
+		PlayersCount:   playersCount,
+		CanStart:       canStart,
 		CreatedAt:      room.CreatedAt.Format(time.RFC3339),
 		UpdatedAt:      room.UpdatedAt.Format(time.RFC3339),
 	}
 }
 
-func roomWithPlayerStatsToResponse(room model.Room, participants []model.RoomParticipant) dto.RoomResponse {
-	resp := roomToResponse(room)
-	resp.PlayersCount = len(participants)
-	resp.CanStart = room.Status == model.RoomStatusWaiting && len(participants) >= 2
+func (s *Service) roomWithPlayerStatsToResponse(room model.Room, participants []model.RoomParticipant) dto.RoomResponse {
+	resp := s.roomToResponse(room)
+	resp.PlayersCount = len(participants) + len(s.roomBotParticipants(room))
+	resp.CanStart = room.Status == model.RoomStatusWaiting && len(participants) > 0 && resp.PlayersCount >= 2
 	return resp
 }
 
-func roomWithParticipantsToResponse(room model.Room, participants []model.RoomParticipant) dto.RoomResponse {
-	resp := roomWithPlayerStatsToResponse(room, participants)
-	resp.Participants = make([]dto.ParticipantResponse, 0, len(participants))
+func (s *Service) roomWithParticipantsToResponse(room model.Room, participants []model.RoomParticipant) dto.RoomResponse {
+	allParticipants := s.withRoomBotParticipants(room, participants)
+	resp := s.roomWithPlayerStatsToResponse(room, participants)
+	resp.Participants = make([]dto.ParticipantResponse, 0, len(allParticipants))
 
-	for _, p := range participants {
+	for _, p := range allParticipants {
 		resp.Participants = append(resp.Participants, dto.ParticipantResponse{
-			ActorID:     p.ActorID,
-			ActorType:   string(p.ActorType),
-			DisplayName: p.DisplayName,
-			JoinedAt:    p.JoinedAt.Format(time.RFC3339),
+			ActorID:       p.ActorID,
+			ActorType:     string(p.ActorType),
+			DisplayName:   p.DisplayName,
+			BotDifficulty: p.BotDifficulty,
+			JoinedAt:      p.JoinedAt.Format(time.RFC3339),
 		})
 	}
 
 	return resp
+}
+
+func (s *Service) withRoomBotParticipants(room model.Room, participants []model.RoomParticipant) []model.RoomParticipant {
+	bots := s.roomBotParticipants(room)
+	if len(bots) == 0 {
+		return participants
+	}
+	allParticipants := make([]model.RoomParticipant, 0, len(participants)+len(bots))
+	allParticipants = append(allParticipants, participants...)
+	allParticipants = append(allParticipants, bots...)
+	return allParticipants
+}
+
+func (s *Service) roomBotParticipants(room model.Room) []model.RoomParticipant {
+	if s == nil || s.games == nil {
+		return nil
+	}
+	bots, err := s.games.BuildRoomBotParticipants(room.GameType, room.ID, room.Settings, room.CreatedAt)
+	if err != nil {
+		return nil
+	}
+	return bots
+}
+
+func (s *Service) roomReservedSlots(room model.Room) int {
+	return len(s.roomBotParticipants(room))
 }
 
 func (s *Service) CreateRoom(ctx context.Context, req dto.CreateRoomServiceRequest) (*dto.RoomResponse, error) {
@@ -101,7 +132,7 @@ func (s *Service) CreateRoom(ctx context.Context, req dto.CreateRoomServiceReque
 		return nil, err
 	}
 
-	resp := roomWithParticipantsToResponse(*room, nil)
+	resp := s.roomWithParticipantsToResponse(*room, nil)
 	return &resp, nil
 }
 
@@ -116,7 +147,7 @@ func (s *Service) ListPublicRooms(ctx context.Context) (*dto.ListPublicRoomsResp
 	}
 
 	for _, room := range rooms {
-		resp.Rooms = append(resp.Rooms, roomToResponse(room))
+		resp.Rooms = append(resp.Rooms, s.roomToResponse(room))
 	}
 
 	return resp, nil
@@ -142,14 +173,29 @@ func (s *Service) GetRoomByInviteCode(ctx context.Context, inviteCode string) (*
 	}
 
 	resp := &dto.GetRoomByInviteCodeResponse{
-		Room: roomWithParticipantsToResponse(*room, participants),
+		Room: s.roomWithParticipantsToResponse(*room, participants),
 	}
 
 	return resp, nil
 }
 
 func (s *Service) JoinRoom(ctx context.Context, req dto.JoinRoomRequest) (*dto.RoomResponse, error) {
-	room, participants, err := s.repo.JoinRoom(ctx, req.RoomID, req.Actor.ID, model.ActorType(req.Actor.Type), req.Actor.DisplayName)
+	currentRoom, err := s.repo.GetByID(ctx, req.RoomID)
+	if err != nil {
+		if errors.Is(err, roomPostgres.ErrNotFound) {
+			return nil, ErrRoomNotFound
+		}
+		return nil, err
+	}
+
+	room, participants, err := s.repo.JoinRoom(
+		ctx,
+		req.RoomID,
+		req.Actor.ID,
+		model.ActorType(req.Actor.Type),
+		req.Actor.DisplayName,
+		s.roomReservedSlots(*currentRoom),
+	)
 	if err != nil {
 		switch {
 		case errors.Is(err, roomPostgres.ErrNotFound):
@@ -163,7 +209,7 @@ func (s *Service) JoinRoom(ctx context.Context, req dto.JoinRoomRequest) (*dto.R
 		}
 	}
 
-	resp := roomWithParticipantsToResponse(*room, participants)
+	resp := s.roomWithParticipantsToResponse(*room, participants)
 	return &resp, nil
 }
 
@@ -185,7 +231,7 @@ func (s *Service) GetRoomState(ctx context.Context, roomID string) (*dto.RoomRes
 		return nil, err
 	}
 
-	resp := roomWithParticipantsToResponse(*room, participants)
+	resp := s.roomWithParticipantsToResponse(*room, participants)
 	return &resp, nil
 }
 
@@ -249,7 +295,19 @@ func (s *Service) UpdateRoomSettings(ctx context.Context, req dto.UpdateRoomSett
 		return nil, mapGameRoomError(err)
 	}
 
-	updatedRoom, participants, err := s.repo.UpdateSettings(ctx, req.RoomID, name, isPrivate, gameType, maxPlayers, settings)
+	currentParticipants, err := s.repo.ListParticipants(ctx, req.RoomID)
+	if err != nil {
+		return nil, err
+	}
+	bots, err := s.games.BuildRoomBotParticipants(gameType, req.RoomID, settings, room.CreatedAt)
+	if err != nil {
+		return nil, mapGameRoomError(err)
+	}
+	if len(currentParticipants)+len(bots) > maxPlayers {
+		return nil, ErrMaxPlayersLessThanParticipants
+	}
+
+	updatedRoom, participants, err := s.repo.UpdateSettings(ctx, req.RoomID, name, isPrivate, gameType, maxPlayers, settings, len(bots))
 	if err != nil {
 		switch {
 		case errors.Is(err, roomPostgres.ErrNotFound):
@@ -263,7 +321,7 @@ func (s *Service) UpdateRoomSettings(ctx context.Context, req dto.UpdateRoomSett
 		}
 	}
 
-	resp := roomWithParticipantsToResponse(*updatedRoom, participants)
+	resp := s.roomWithParticipantsToResponse(*updatedRoom, participants)
 	return &resp, nil
 }
 
@@ -289,11 +347,18 @@ func (s *Service) StartRoom(ctx context.Context, req dto.StartRoomRequest) (*dto
 		return nil, err
 	}
 
-	if len(participants) < 2 {
+	if len(participants) == 0 {
 		return nil, ErrNotEnoughPlayers
 	}
+	allParticipants := s.withRoomBotParticipants(*room, participants)
+	if len(allParticipants) < 2 {
+		return nil, ErrNotEnoughPlayers
+	}
+	if len(allParticipants) > room.MaxPlayers {
+		return nil, ErrRoomNotReady
+	}
 
-	match, matchPlayers, err := s.games.BuildInitialMatch(room, participants)
+	match, matchPlayers, err := s.games.BuildInitialMatch(room, allParticipants)
 	if err != nil {
 		return nil, mapGameRoomError(err)
 	}
@@ -312,7 +377,7 @@ func (s *Service) StartRoom(ctx context.Context, req dto.StartRoomRequest) (*dto
 		}
 	}
 
-	resp := roomWithParticipantsToResponse(*updatedRoom, updatedParticipants)
+	resp := s.roomWithParticipantsToResponse(*updatedRoom, updatedParticipants)
 	return &resp, nil
 }
 
@@ -330,7 +395,8 @@ func mapGameRoomError(err error) error {
 }
 
 func (s *Service) FinishRoomMatch(ctx context.Context, req dto.FinishRoomMatchRequest) error {
-	if _, err := s.repo.GetByID(ctx, req.RoomID); err != nil {
+	room, err := s.repo.GetByID(ctx, req.RoomID)
+	if err != nil {
 		if errors.Is(err, roomPostgres.ErrNotFound) {
 			return ErrRoomNotFound
 		}
@@ -347,7 +413,7 @@ func (s *Service) FinishRoomMatch(ctx context.Context, req dto.FinishRoomMatchRe
 		if participantsErr != nil {
 			return participantsErr
 		}
-		if !containsParticipant(participants, *req.ActorID) {
+		if !containsParticipant(s.withRoomBotParticipants(*room, participants), *req.ActorID) {
 			return ErrForbidden
 		}
 	}
@@ -501,7 +567,7 @@ func (s *Service) KickParticipant(ctx context.Context, req dto.KickParticipantRe
 
 	room.PlayersCount = len(participants)
 
-	resp := roomWithParticipantsToResponse(*room, participants)
+	resp := s.roomWithParticipantsToResponse(*room, participants)
 	return &resp, nil
 }
 

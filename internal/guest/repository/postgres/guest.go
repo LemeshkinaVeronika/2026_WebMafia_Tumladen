@@ -76,7 +76,7 @@ func (r *Repository) CleanupExpired(ctx context.Context, now time.Time) ([]strin
 		NOT EXISTS (
 			SELECT 1
 			FROM guest_sessions gs
-			WHERE gs.actor_id = rp.actor_id
+			WHERE gs.actor_id::TEXT = rp.actor_id
 			  AND (gs.expires_at IS NULL OR gs.expires_at > $1)
 		)
 	`, now)

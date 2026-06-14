@@ -2,6 +2,8 @@ package service
 
 import (
 	"encoding/json"
+	"strings"
+	"time"
 
 	carcassonneDTO "github.com/webmafia/tumladan/internal/game/carcassonne/dto"
 	gameService "github.com/webmafia/tumladan/internal/game/service"
@@ -19,6 +21,7 @@ const (
 func defaultRoomSettings() carcassonneDTO.RoomSettings {
 	return carcassonneDTO.RoomSettings{
 		TurnTimeSeconds: defaultTurnTime,
+		Bots:            []carcassonneDTO.BotSettings{},
 	}
 }
 
@@ -34,6 +37,9 @@ func (e *Engine) NormalizeRoomSettings(raw json.RawMessage) (model.JSONB, error)
 	if settings.TurnTimeSeconds != 0 && (settings.TurnTimeSeconds < minTurnTimeSeconds || settings.TurnTimeSeconds > maxTurnTimeSeconds) {
 		return nil, gameService.ErrInvalidRoomSettings
 	}
+	if err := normalizeBotSettings(&settings); err != nil {
+		return nil, err
+	}
 
 	normalized, err := json.Marshal(settings)
 	if err != nil {
@@ -43,10 +49,58 @@ func (e *Engine) NormalizeRoomSettings(raw json.RawMessage) (model.JSONB, error)
 	return model.JSONB(normalized), nil
 }
 
-func (e *Engine) ValidateRoomConfig(maxPlayers int, _ model.JSONB) error {
+func (e *Engine) ValidateRoomConfig(maxPlayers int, rawSettings model.JSONB) error {
 	if maxPlayers < minPlayersLimit || maxPlayers > maxPlayersLimit {
+		return gameService.ErrInvalidRoomConfig
+	}
+	var settings carcassonneDTO.RoomSettings
+	if err := json.Unmarshal(rawSettings, &settings); err != nil {
+		return gameService.ErrInvalidRoomSettings
+	}
+	if len(settings.Bots) > maxPlayers {
 		return gameService.ErrInvalidRoomConfig
 	}
 
 	return nil
+}
+
+func normalizeBotSettings(settings *carcassonneDTO.RoomSettings) error {
+	for i := range settings.Bots {
+		difficulty, ok := normalizeBotDifficulty(BotDifficulty(strings.TrimSpace(settings.Bots[i].Difficulty)))
+		if !ok {
+			return gameService.ErrInvalidRoomSettings
+		}
+		settings.Bots[i].Difficulty = string(difficulty)
+	}
+	if settings.Bots == nil {
+		settings.Bots = []carcassonneDTO.BotSettings{}
+	}
+	return nil
+}
+
+func (e *Engine) BuildRoomBotParticipants(roomID string, settings model.JSONB, joinedAt time.Time) ([]model.RoomParticipant, error) {
+	var roomSettings carcassonneDTO.RoomSettings
+	if err := json.Unmarshal(settings, &roomSettings); err != nil {
+		return nil, gameService.ErrInvalidRoomSettings
+	}
+	if err := normalizeBotSettings(&roomSettings); err != nil {
+		return nil, err
+	}
+
+	bots := make([]model.RoomParticipant, 0, len(roomSettings.Bots))
+	for i, bot := range roomSettings.Bots {
+		identity := botActorIdentity{
+			RoomID: roomID,
+			Number: i + 1,
+		}
+		bots = append(bots, model.RoomParticipant{
+			RoomID:        roomID,
+			ActorID:       formatBotActorID(identity),
+			ActorType:     model.ActorTypeBot,
+			DisplayName:   formatBotDisplayName(identity),
+			BotDifficulty: bot.Difficulty,
+			JoinedAt:      joinedAt,
+		})
+	}
+	return bots, nil
 }
