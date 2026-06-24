@@ -7,6 +7,7 @@ const (
 	ZoneTypeRoad      ZoneType = "road"
 	ZoneTypeMonastery ZoneType = "monastery"
 	ZoneTypeField     ZoneType = "field"
+	ZonaTypeCathedral ZoneType = "cathedral"
 )
 
 type EdgeType string
@@ -69,4 +70,5 @@ type ZoneDefinition struct {
 	Type       ZoneType      `json:"type"`
 	Segments   []ZoneSegment `json:"segments,omitempty"`
 	HasPennant bool          `json:"hasPennant,omitempty"`
+	HasInn     bool          `json:"hasInn,omitempty"`
 }
