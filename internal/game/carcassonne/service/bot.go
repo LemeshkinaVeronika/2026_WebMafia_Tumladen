@@ -105,6 +105,7 @@ func (e *Engine) buildBotMeepleAction(
 		TileInstanceID: placement.TileInstanceID,
 		ZoneID:         placement.ZoneID,
 		Segment:        placement.Segment,
+		MeepleType:     botMeepleType(placement),
 	})
 	if err != nil {
 		return gameService.ApplyActionRequest{}, err
@@ -347,15 +348,11 @@ func (e *Engine) scoreBotMeeplePlacement(
 		TileInstanceID: placement.TileInstanceID,
 		ZoneID:         placement.ZoneID,
 		ActorID:        actorID,
+		MeepleType:     botMeepleType(placement),
 		FeatureType:    placement.FeatureType,
 		Segment:        placement.Segment,
 	})
-	for i := range simulated.Players {
-		if simulated.Players[i].ActorID == actorID {
-			simulated.Players[i].MeeplesLeft--
-			break
-		}
-	}
+	decrementMeeple(simulated.Players, actorID, botMeepleType(placement))
 
 	before := scoresByActor(state.Players)
 	if err := e.scoreCompletedRoads(&simulated); err != nil {
@@ -381,6 +378,16 @@ func (e *Engine) scoreBotMeeplePlacement(
 	}
 
 	return e.scoreLongTermMeeplePlacement(state, placement)
+}
+
+func botMeepleType(placement carcassonneDTO.ValidMeeplePlacement) carcassonneDTO.MeepleType {
+	if slices.Contains(placement.AvailableMeepleTypes, carcassonneDTO.MeepleTypeRegular) {
+		return carcassonneDTO.MeepleTypeRegular
+	}
+	if slices.Contains(placement.AvailableMeepleTypes, carcassonneDTO.MeepleTypeBig) {
+		return carcassonneDTO.MeepleTypeBig
+	}
+	return carcassonneDTO.MeepleTypeRegular
 }
 
 func (e *Engine) scoreLongTermMeeplePlacement(

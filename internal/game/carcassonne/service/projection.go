@@ -299,7 +299,7 @@ func (e *Engine) validTilePlacements(state carcassonneDTO.GameState) []carcasson
 }
 
 func (e *Engine) validMeeplePlacements(state carcassonneDTO.GameState, actorID string) []carcassonneDTO.ValidMeeplePlacement {
-	if state.LastPlacedTile == nil || meeplesLeft(state.Players, actorID) <= 0 {
+	if state.LastPlacedTile == nil || (meeplesLeft(state.Players, actorID) <= 0 && bigMeeplesLeft(state.Players, actorID) <= 0) {
 		return []carcassonneDTO.ValidMeeplePlacement{}
 	}
 
@@ -310,17 +310,30 @@ func (e *Engine) validMeeplePlacements(state carcassonneDTO.GameState, actorID s
 
 	placements := make([]carcassonneDTO.ValidMeeplePlacement, 0, len(def.Zones))
 	for _, zone := range def.Zones {
-		if e.canPlaceMeeple(state, actorID, zone.ZoneID) {
+		availableTypes := availableMeepleTypes(state.Players, actorID)
+		if len(availableTypes) > 0 && e.canPlaceMeeple(state, actorID, zone.ZoneID, availableTypes[0]) {
 			placements = append(placements, carcassonneDTO.ValidMeeplePlacement{
-				TileInstanceID: state.LastPlacedTile.InstanceID,
-				X:              state.LastPlacedTile.X,
-				Y:              state.LastPlacedTile.Y,
-				ZoneID:         zone.ZoneID,
-				FeatureType:    zone.Type,
-				Segment:        placementSegment(zone, state.LastPlacedTile.Rotation),
+				TileInstanceID:       state.LastPlacedTile.InstanceID,
+				X:                    state.LastPlacedTile.X,
+				Y:                    state.LastPlacedTile.Y,
+				ZoneID:               zone.ZoneID,
+				FeatureType:          zone.Type,
+				Segment:              placementSegment(zone, state.LastPlacedTile.Rotation),
+				AvailableMeepleTypes: availableTypes,
 			})
 		}
 	}
 
 	return placements
+}
+
+func availableMeepleTypes(players []carcassonneDTO.PlayerState, actorID string) []carcassonneDTO.MeepleType {
+	types := make([]carcassonneDTO.MeepleType, 0, 2)
+	if meeplesLeft(players, actorID) > 0 {
+		types = append(types, carcassonneDTO.MeepleTypeRegular)
+	}
+	if bigMeeplesLeft(players, actorID) > 0 {
+		types = append(types, carcassonneDTO.MeepleTypeBig)
+	}
+	return types
 }

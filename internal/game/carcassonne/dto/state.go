@@ -1,15 +1,17 @@
 package dto
 
 type MatchSettings struct {
-	TurnTimeSeconds int `json:"turnTimeSeconds"`
+	TurnTimeSeconds int      `json:"turnTimeSeconds"`
+	Expansions      []string `json:"expansions,omitempty"`
 }
 
 type PlayerState struct {
-	ActorID     string `json:"actorId"`
-	DisplayName string `json:"displayName"`
-	Seat        int    `json:"seat"`
-	Score       int    `json:"score"`
-	MeeplesLeft int    `json:"meeplesLeft"`
+	ActorID        string `json:"actorId"`
+	DisplayName    string `json:"displayName"`
+	Seat           int    `json:"seat"`
+	Score          int    `json:"score"`
+	MeeplesLeft    int    `json:"meeplesLeft"`
+	BigMeeplesLeft int    `json:"bigMeeplesLeft,omitempty"`
 }
 
 type PublicGameState struct {
@@ -61,9 +63,17 @@ type PlacedMeeple struct {
 	TileInstanceID string      `json:"tileInstanceId"`
 	ZoneID         string      `json:"zoneId"`
 	ActorID        string      `json:"actorId"`
+	MeepleType     MeepleType  `json:"meepleType,omitempty"`
 	FeatureType    ZoneType    `json:"featureType,omitempty"`
 	Segment        ZoneSegment `json:"segment,omitempty"`
 }
+
+type MeepleType string
+
+const (
+	MeepleTypeRegular MeepleType = "regular"
+	MeepleTypeBig     MeepleType = "big"
+)
 
 type TileView struct {
 	TileID   string `json:"tileId"`
@@ -101,12 +111,13 @@ type ValidTilePlacement struct {
 }
 
 type ValidMeeplePlacement struct {
-	TileInstanceID string      `json:"tileInstanceId"`
-	X              int         `json:"x"`
-	Y              int         `json:"y"`
-	ZoneID         string      `json:"zoneId"`
-	FeatureType    ZoneType    `json:"featureType"`
-	Segment        ZoneSegment `json:"segment"`
+	TileInstanceID       string       `json:"tileInstanceId"`
+	X                    int          `json:"x"`
+	Y                    int          `json:"y"`
+	ZoneID               string       `json:"zoneId"`
+	FeatureType          ZoneType     `json:"featureType"`
+	Segment              ZoneSegment  `json:"segment"`
+	AvailableMeepleTypes []MeepleType `json:"availableMeepleTypes,omitempty"`
 }
 
 type MatchResult struct {

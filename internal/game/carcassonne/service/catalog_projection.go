@@ -13,22 +13,32 @@ func (e *Engine) BuildTileCatalog() (json.RawMessage, error) {
 	for _, def := range definitions {
 		segments := make([]carcassonneDTO.ZoneSegment, 0)
 		hasPennant := false
+		hasInn := false
+		hasCathedral := false
 
 		for _, zone := range def.Zones {
 			segments = append(segments, zone.Segments...)
 			if zone.HasPennant {
 				hasPennant = true
 			}
+			if zone.HasInn {
+				hasInn = true
+			}
+			if zone.Type == carcassonneDTO.ZoneTypeCathedral {
+				hasCathedral = true
+			}
 		}
 
 		items = append(items, carcassonneDTO.TileCatalogItem{
-			TileID:     def.TileID,
-			ImageURL:   def.ImageKey,
-			Edges:      def.Edges,
-			Zones:      def.Zones,
-			Segments:   segments,
-			HasPennant: hasPennant,
-			Count:      def.Count,
+			TileID:       def.TileID,
+			ImageURL:     def.ImageKey,
+			Edges:        def.Edges,
+			Zones:        def.Zones,
+			Segments:     segments,
+			HasPennant:   hasPennant,
+			HasInn:       hasInn,
+			HasCathedral: hasCathedral,
+			Count:        def.Count,
 		})
 	}
 

@@ -191,7 +191,8 @@ func (e *Engine) placeMeeple(match *model.Match, state *carcassonneDTO.GameState
 		return gameService.ApplyActionResult{}, gameService.ErrInvalidMatchAction
 	}
 
-	if !e.canPlaceMeeple(*state, req.ActorID, payload.ZoneID) {
+	meepleType := normalizeMeepleType(payload.MeepleType)
+	if !e.canPlaceMeeple(*state, req.ActorID, payload.ZoneID, meepleType) {
 		return gameService.ApplyActionResult{}, gameService.ErrInvalidMatchAction
 	}
 
@@ -212,15 +213,11 @@ func (e *Engine) placeMeeple(match *model.Match, state *carcassonneDTO.GameState
 		TileInstanceID: state.LastPlacedTile.InstanceID,
 		ZoneID:         payload.ZoneID,
 		ActorID:        req.ActorID,
+		MeepleType:     meepleType,
 		FeatureType:    zone.Type,
 		Segment:        segment,
 	})
-	for i := range state.Players {
-		if state.Players[i].ActorID == req.ActorID {
-			state.Players[i].MeeplesLeft--
-			break
-		}
-	}
+	decrementMeeple(state.Players, req.ActorID, meepleType)
 
 	return e.resolveTurn(state)
 }
@@ -286,11 +283,15 @@ func (e *Engine) canPlaceTile(tile carcassonneDTO.TileInstance, x, y, rotation i
 	return hasNeighbor
 }
 
-func (e *Engine) canPlaceMeeple(state carcassonneDTO.GameState, actorID string, zoneID string) bool {
+func (e *Engine) canPlaceMeeple(state carcassonneDTO.GameState, actorID string, zoneID string, meepleTypes ...carcassonneDTO.MeepleType) bool {
 	if zoneID == "" || state.LastPlacedTile == nil {
 		return false
 	}
-	if meeplesLeft(state.Players, actorID) <= 0 {
+	meepleType := carcassonneDTO.MeepleTypeRegular
+	if len(meepleTypes) > 0 {
+		meepleType = meepleTypes[0]
+	}
+	if !hasMeepleLeft(state.Players, actorID, meepleType) {
 		return false
 	}
 
@@ -363,6 +364,52 @@ func meeplesLeft(players []carcassonneDTO.PlayerState, actorID string) int {
 		}
 	}
 	return 0
+}
+
+func bigMeeplesLeft(players []carcassonneDTO.PlayerState, actorID string) int {
+	for _, player := range players {
+		if player.ActorID == actorID {
+			return player.BigMeeplesLeft
+		}
+	}
+	return 0
+}
+
+func normalizeMeepleType(meepleType carcassonneDTO.MeepleType) carcassonneDTO.MeepleType {
+	switch meepleType {
+	case "", carcassonneDTO.MeepleTypeRegular:
+		return carcassonneDTO.MeepleTypeRegular
+	case carcassonneDTO.MeepleTypeBig:
+		return carcassonneDTO.MeepleTypeBig
+	default:
+		return ""
+	}
+}
+
+func hasMeepleLeft(players []carcassonneDTO.PlayerState, actorID string, meepleType carcassonneDTO.MeepleType) bool {
+	switch normalizeMeepleType(meepleType) {
+	case carcassonneDTO.MeepleTypeRegular:
+		return meeplesLeft(players, actorID) > 0
+	case carcassonneDTO.MeepleTypeBig:
+		return bigMeeplesLeft(players, actorID) > 0
+	default:
+		return false
+	}
+}
+
+func decrementMeeple(players []carcassonneDTO.PlayerState, actorID string, meepleType carcassonneDTO.MeepleType) {
+	for i := range players {
+		if players[i].ActorID != actorID {
+			continue
+		}
+		switch normalizeMeepleType(meepleType) {
+		case carcassonneDTO.MeepleTypeBig:
+			players[i].BigMeeplesLeft--
+		default:
+			players[i].MeeplesLeft--
+		}
+		return
+	}
 }
 
 func isValidRotation(rotation int) bool {

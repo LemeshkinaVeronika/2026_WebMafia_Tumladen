@@ -185,7 +185,7 @@ func (e *Engine) buildFieldGraph(state carcassonneDTO.GameState) (*fieldGraph, e
 			if graph.meeplesByRoot[root] == nil {
 				graph.meeplesByRoot[root] = make(map[string]int)
 			}
-			graph.meeplesByRoot[root][meeple.ActorID]++
+			graph.meeplesByRoot[root][meeple.ActorID] += meepleWeight(meeple)
 		}
 	}
 

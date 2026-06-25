@@ -95,7 +95,7 @@ func (e *Engine) buildFeature(state carcassonneDTO.GameState, start placedZoneRe
 
 		for _, meeple := range state.Meeples {
 			if meeple.TileInstanceID == currentRef.TileInstanceID && meeple.ZoneID == currentRef.ZoneID {
-				result.MeeplesByActor[meeple.ActorID]++
+				result.MeeplesByActor[meeple.ActorID] += meepleWeight(meeple)
 			}
 		}
 

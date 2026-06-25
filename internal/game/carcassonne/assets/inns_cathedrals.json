@@ -199,7 +199,7 @@
       {
         "zoneId": "city_1",
         "type": "city",
-        "segments": ["left_center","left_bottom", "left_top", "center", "right_top"]
+        "segments": ["left_center","left_bottom", "left_top", "center"]
       },
       {
         "zoneId": "field_1",
@@ -209,7 +209,7 @@
       {
         "zoneId": "field_2",
         "type": "field",
-        "segments": ["bottom_right", "bottom_left",  "bottom_center", "right_bottom", "right_center"]
+        "segments": ["bottom_right", "bottom_left",  "bottom_center", "right_bottom", "right_center",  "right_top"]
       }
     ]
   },
@@ -424,7 +424,7 @@
         "segments": ["bottom_right", "right_bottom"]
       },
       {
-        "zoneId": "field_2",
+        "zoneId": "field_3",
         "type": "field",
         "segments": ["top_left", "left_top"]
       }

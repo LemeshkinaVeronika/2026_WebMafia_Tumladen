@@ -59,7 +59,7 @@ func (e *Engine) scoreCompletedRoads(state *carcassonneDTO.GameState) error {
 			continue
 		}
 
-		score := len(uniqueTileInstanceIDs(feature))
+		score := e.completedRoadScore(*state, feature)
 		if score <= 0 {
 			continue
 		}
@@ -290,8 +290,14 @@ func (e *Engine) finalFeatureScore(
 ) int {
 	switch zoneType {
 	case carcassonneDTO.ZoneTypeRoad:
+		if e.featureHasInn(state, feature) {
+			return 0
+		}
 		return len(uniqueTileInstanceIDs(feature))
 	case carcassonneDTO.ZoneTypeCity:
+		if e.featureHasCathedral(state, feature) {
+			return 0
+		}
 		tileCount := len(uniqueTileInstanceIDs(feature))
 		pennantCount := e.countPennantsForFeature(state, feature)
 		return tileCount + pennantCount
@@ -336,12 +342,7 @@ func (e *Engine) applyScore(state *carcassonneDTO.GameState, actorIDs []string, 
 
 func (e *Engine) returnAllMeeples(state *carcassonneDTO.GameState) {
 	for _, meeple := range state.Meeples {
-		for i := range state.Players {
-			if state.Players[i].ActorID == meeple.ActorID {
-				state.Players[i].MeeplesLeft++
-				break
-			}
-		}
+		incrementMeeple(state.Players, meeple.ActorID, meeple.MeepleType)
 	}
 
 	state.Meeples = []carcassonneDTO.PlacedMeeple{}
@@ -360,12 +361,7 @@ func (e *Engine) returnMeeplesForFeature(state *carcassonneDTO.GameState, featur
 		})
 
 		if inFeature {
-			for i := range state.Players {
-				if state.Players[i].ActorID == meeple.ActorID {
-					state.Players[i].MeeplesLeft++
-					break
-				}
-			}
+			incrementMeeple(state.Players, meeple.ActorID, meeple.MeepleType)
 			continue
 		}
 
@@ -380,12 +376,7 @@ func (e *Engine) returnMeeple(state *carcassonneDTO.GameState, tileInstanceID, z
 
 	for _, meeple := range state.Meeples {
 		if meeple.TileInstanceID == tileInstanceID && meeple.ZoneID == zoneID && meeple.ActorID == actorID {
-			for i := range state.Players {
-				if state.Players[i].ActorID == actorID {
-					state.Players[i].MeeplesLeft++
-					break
-				}
-			}
+			incrementMeeple(state.Players, actorID, meeple.MeepleType)
 			continue
 		}
 
@@ -419,6 +410,28 @@ func winningActors(meeplesByActor map[string]int) []string {
 	}
 
 	return winners
+}
+
+func meepleWeight(meeple carcassonneDTO.PlacedMeeple) int {
+	if normalizeMeepleType(meeple.MeepleType) == carcassonneDTO.MeepleTypeBig {
+		return 2
+	}
+	return 1
+}
+
+func incrementMeeple(players []carcassonneDTO.PlayerState, actorID string, meepleType carcassonneDTO.MeepleType) {
+	for i := range players {
+		if players[i].ActorID != actorID {
+			continue
+		}
+		switch normalizeMeepleType(meepleType) {
+		case carcassonneDTO.MeepleTypeBig:
+			players[i].BigMeeplesLeft++
+		default:
+			players[i].MeeplesLeft++
+		}
+		return
+	}
 }
 
 func placedTileByInstanceID(board []carcassonneDTO.PlacedTile, instanceID string) *carcassonneDTO.PlacedTile {
@@ -528,6 +541,71 @@ func (e *Engine) countPennantsForFeature(state carcassonneDTO.GameState, feature
 	return count
 }
 
+func (e *Engine) completedRoadScore(state carcassonneDTO.GameState, feature *feature) int {
+	tileCount := len(uniqueTileInstanceIDs(feature))
+	if e.featureHasInn(state, feature) {
+		return tileCount * 2
+	}
+	return tileCount
+}
+
+func (e *Engine) completedCityScore(
+	state carcassonneDTO.GameState,
+	feature *feature,
+	tileCount int,
+	pennantCount int,
+) int {
+	if e.featureHasCathedral(state, feature) {
+		return tileCount*3 + pennantCount*3
+	}
+	return tileCount*2 + pennantCount*2
+}
+
+func (e *Engine) featureHasInn(state carcassonneDTO.GameState, feature *feature) bool {
+	if feature == nil {
+		return false
+	}
+
+	for _, ref := range feature.Zones {
+		placedZone, err := e.getPlacedZone(state, ref)
+		if err != nil {
+			continue
+		}
+		if placedZone.Zone.Type == carcassonneDTO.ZoneTypeRoad && placedZone.Zone.HasInn {
+			return true
+		}
+	}
+	return false
+}
+
+func (e *Engine) featureHasCathedral(state carcassonneDTO.GameState, feature *feature) bool {
+	if feature == nil {
+		return false
+	}
+
+	tileInstanceIDs := make(map[string]struct{}, len(feature.Zones))
+	for _, ref := range feature.Zones {
+		tileInstanceIDs[ref.TileInstanceID] = struct{}{}
+	}
+
+	for tileInstanceID := range tileInstanceIDs {
+		tile := placedTileByInstanceID(state.Board, tileInstanceID)
+		if tile == nil {
+			continue
+		}
+		def, ok := e.catalog.Get(tile.TileID)
+		if !ok {
+			continue
+		}
+		for _, zone := range def.Zones {
+			if zone.Type == carcassonneDTO.ZoneTypeCathedral {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (e *Engine) scoreCompletedCities(state *carcassonneDTO.GameState) error {
 	startZones := e.lastPlacedZoneRefsByType(*state, carcassonneDTO.ZoneTypeCity)
 	if len(startZones) == 0 {
@@ -561,7 +639,7 @@ func (e *Engine) scoreCompletedCities(state *carcassonneDTO.GameState) error {
 
 		tileCount := len(uniqueTileInstanceIDs(feature))
 		pennantCount := e.countPennantsForFeature(*state, feature)
-		score := tileCount*2 + pennantCount*2
+		score := e.completedCityScore(*state, feature, tileCount, pennantCount)
 		if score <= 0 {
 			continue
 		}

@@ -7,7 +7,7 @@ const (
 	ZoneTypeRoad      ZoneType = "road"
 	ZoneTypeMonastery ZoneType = "monastery"
 	ZoneTypeField     ZoneType = "field"
-	ZonaTypeCathedral ZoneType = "cathedral"
+	ZoneTypeCathedral ZoneType = "cathedral"
 )
 
 type EdgeType string
@@ -49,13 +49,15 @@ type TileDefinition struct {
 }
 
 type TileCatalogItem struct {
-	TileID     string           `json:"tileId"`
-	ImageURL   string           `json:"imageUrl"`
-	Edges      TileEdges        `json:"edges"`
-	Zones      []ZoneDefinition `json:"zones"`
-	Segments   []ZoneSegment    `json:"segments"`
-	HasPennant bool             `json:"hasPennant"`
-	Count      int              `json:"count"`
+	TileID       string           `json:"tileId"`
+	ImageURL     string           `json:"imageUrl"`
+	Edges        TileEdges        `json:"edges"`
+	Zones        []ZoneDefinition `json:"zones"`
+	Segments     []ZoneSegment    `json:"segments"`
+	HasPennant   bool             `json:"hasPennant"`
+	HasInn       bool             `json:"hasInn"`
+	HasCathedral bool             `json:"hasCathedral"`
+	Count        int              `json:"count"`
 }
 
 type TileEdges struct {

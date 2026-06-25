@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,6 +11,7 @@ import (
 )
 
 const defaultMeeplesPerGuy = 7
+const defaultBigMeeplesPerGuy = 1
 
 func (e *Engine) BuildInitialMatch(room *model.Room, participants []model.RoomParticipant) (*model.Match, []model.MatchPlayer, error) {
 	now := time.Now().UTC()
@@ -33,12 +35,18 @@ func (e *Engine) BuildInitialMatch(room *model.Room, participants []model.RoomPa
 			Seat:          i,
 		})
 
+		bigMeeplesLeft := 0
+		if slices.Contains(roomSettings.Expansions, ExpansionInnsAndCathedrals) {
+			bigMeeplesLeft = defaultBigMeeplesPerGuy
+		}
+
 		statePlayers = append(statePlayers, carcassonneDTO.PlayerState{
-			ActorID:     participant.ActorID,
-			DisplayName: participant.DisplayName,
-			Seat:        i,
-			Score:       0,
-			MeeplesLeft: defaultMeeplesPerGuy,
+			ActorID:        participant.ActorID,
+			DisplayName:    participant.DisplayName,
+			Seat:           i,
+			Score:          0,
+			MeeplesLeft:    defaultMeeplesPerGuy,
+			BigMeeplesLeft: bigMeeplesLeft,
 		})
 	}
 
@@ -57,7 +65,7 @@ func (e *Engine) BuildInitialMatch(room *model.Room, participants []model.RoomPa
 		TurnNumber: 0,
 	}
 
-	deck := buildDeck(e.catalog.BaseDeck())
+	deck := buildDeck(e.catalog.Deck(roomSettings.Expansions))
 	shuffleDeck(deck)
 
 	currentTile, deckRemaining := e.drawNextPlaceableTile(deck, []carcassonneDTO.PlacedTile{startTile})
@@ -87,6 +95,7 @@ func (e *Engine) BuildInitialMatch(room *model.Room, participants []model.RoomPa
 		Board:           []carcassonneDTO.PlacedTile{startTile},
 		Settings: carcassonneDTO.MatchSettings{
 			TurnTimeSeconds: roomSettings.TurnTimeSeconds,
+			Expansions:      roomSettings.Expansions,
 		},
 		DeckRemaining:  deckRemaining,
 		CurrentTile:    currentTile,

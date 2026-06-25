@@ -12,21 +12,32 @@ import (
 type TileCatalog interface {
 	Get(tileID string) (carcassonneDTO.TileDefinition, bool)
 	Definitions() []carcassonneDTO.TileDefinition
-	BaseDeck() []string
+	Deck(expansions []string) []string
 	StartTileID() string
 }
 
 type AssetTileCatalog struct {
-	definitions []carcassonneDTO.TileDefinition
-	byID        map[string]carcassonneDTO.TileDefinition
-	startTileID string
+	definitions          []carcassonneDTO.TileDefinition
+	baseDefinitions      []carcassonneDTO.TileDefinition
+	expansionDefinitions map[string][]carcassonneDTO.TileDefinition
+	byID                 map[string]carcassonneDTO.TileDefinition
+	startTileID          string
 }
 
 func NewAssetTileCatalog() (*AssetTileCatalog, error) {
-	var definitions []carcassonneDTO.TileDefinition
-	if err := json.Unmarshal(carcassonneAssets.BaseTilesJSON, &definitions); err != nil {
+	var baseDefinitions []carcassonneDTO.TileDefinition
+	if err := json.Unmarshal(carcassonneAssets.BaseTilesJSON, &baseDefinitions); err != nil {
 		return nil, fmt.Errorf("unmarshal tile catalog: %w", err)
 	}
+
+	var innsAndCathedralsDefinitions []carcassonneDTO.TileDefinition
+	if err := json.Unmarshal(carcassonneAssets.InnsCathedralsTilesJSON, &innsAndCathedralsDefinitions); err != nil {
+		return nil, fmt.Errorf("unmarshal inns and cathedrals tile catalog: %w", err)
+	}
+
+	definitions := make([]carcassonneDTO.TileDefinition, 0, len(baseDefinitions)+len(innsAndCathedralsDefinitions))
+	definitions = append(definitions, baseDefinitions...)
+	definitions = append(definitions, innsAndCathedralsDefinitions...)
 
 	if err := validateTileDefinitions(definitions); err != nil {
 		return nil, fmt.Errorf("validate tile catalog: %w", err)
@@ -38,7 +49,11 @@ func NewAssetTileCatalog() (*AssetTileCatalog, error) {
 	}
 
 	return &AssetTileCatalog{
-		definitions: definitions,
+		definitions:     definitions,
+		baseDefinitions: baseDefinitions,
+		expansionDefinitions: map[string][]carcassonneDTO.TileDefinition{
+			ExpansionInnsAndCathedrals: innsAndCathedralsDefinitions,
+		},
 		byID:        byID,
 		startTileID: "start_tile",
 	}, nil
@@ -55,9 +70,29 @@ func (c *AssetTileCatalog) Definitions() []carcassonneDTO.TileDefinition {
 	return result
 }
 
+func (c *AssetTileCatalog) Deck(expansions []string) []string {
+	deck := make([]string, 0)
+	appendDefinitions := func(definitions []carcassonneDTO.TileDefinition) {
+		for _, def := range definitions {
+			if def.TileID == c.startTileID {
+				continue
+			}
+			for i := 0; i < def.Count; i++ {
+				deck = append(deck, def.TileID)
+			}
+		}
+	}
+
+	appendDefinitions(c.baseDefinitions)
+	for _, expansion := range expansions {
+		appendDefinitions(c.expansionDefinitions[expansion])
+	}
+	return deck
+}
+
 func (c *AssetTileCatalog) BaseDeck() []string {
 	deck := make([]string, 0)
-	for _, def := range c.definitions {
+	for _, def := range c.baseDefinitions {
 		if def.TileID == c.startTileID {
 			continue
 		}
@@ -143,7 +178,10 @@ func validateTileDefinitions(definitions []carcassonneDTO.TileDefinition) error 
 			if zone.HasPennant && zone.Type != carcassonneDTO.ZoneTypeCity {
 				return fmt.Errorf("zone %s in tile %s has pennant but is not city", zone.ZoneID, def.TileID)
 			}
-			if zone.Type == carcassonneDTO.ZoneTypeField && !zoneHasBoundarySegment(zone) {
+			if zone.HasInn && zone.Type != carcassonneDTO.ZoneTypeRoad {
+				return fmt.Errorf("zone %s in tile %s has inn but is not road", zone.ZoneID, def.TileID)
+			}
+			if zone.Type == carcassonneDTO.ZoneTypeField && !zoneHasBoundarySegment(zone) && tileHasFieldEdge(def) {
 				return fmt.Errorf("field zone %s in tile %s must include a boundary segment", zone.ZoneID, def.TileID)
 			}
 		}
@@ -176,6 +214,13 @@ func zoneHasBoundarySegment(zone carcassonneDTO.ZoneDefinition) bool {
 		}
 	}
 	return false
+}
+
+func tileHasFieldEdge(def carcassonneDTO.TileDefinition) bool {
+	return def.Edges.Top == carcassonneDTO.EdgeTypeField ||
+		def.Edges.Right == carcassonneDTO.EdgeTypeField ||
+		def.Edges.Bottom == carcassonneDTO.EdgeTypeField ||
+		def.Edges.Left == carcassonneDTO.EdgeTypeField
 }
 
 func boundarySegments() []carcassonneDTO.ZoneSegment {

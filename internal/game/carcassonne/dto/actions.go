@@ -12,6 +12,7 @@ type PlaceMeeplePayload struct {
 	TileInstanceID string      `json:"tileInstanceId,omitempty"`
 	ZoneID         string      `json:"zoneId"`
 	Segment        ZoneSegment `json:"segment,omitempty"`
+	MeepleType     MeepleType  `json:"meepleType,omitempty"`
 }
 
 type SkipMeeplePayload struct {

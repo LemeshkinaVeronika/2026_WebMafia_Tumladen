@@ -11,17 +11,19 @@ import (
 )
 
 const (
-	minPlayersLimit    = 2
-	maxPlayersLimit    = 6
-	defaultTurnTime    = 120
-	minTurnTimeSeconds = 30
-	maxTurnTimeSeconds = 300
+	minPlayersLimit            = 2
+	maxPlayersLimit            = 6
+	defaultTurnTime            = 120
+	minTurnTimeSeconds         = 30
+	maxTurnTimeSeconds         = 300
+	ExpansionInnsAndCathedrals = "inns_and_cathedrals"
 )
 
 func defaultRoomSettings() carcassonneDTO.RoomSettings {
 	return carcassonneDTO.RoomSettings{
 		TurnTimeSeconds: defaultTurnTime,
 		Bots:            []carcassonneDTO.BotSettings{},
+		Expansions:      []string{},
 	}
 }
 
@@ -38,6 +40,9 @@ func (e *Engine) NormalizeRoomSettings(raw json.RawMessage) (model.JSONB, error)
 		return nil, gameService.ErrInvalidRoomSettings
 	}
 	if err := normalizeBotSettings(&settings); err != nil {
+		return nil, err
+	}
+	if err := normalizeExpansions(&settings); err != nil {
 		return nil, err
 	}
 
@@ -57,6 +62,9 @@ func (e *Engine) ValidateRoomConfig(maxPlayers int, rawSettings model.JSONB) err
 	if err := json.Unmarshal(rawSettings, &settings); err != nil {
 		return gameService.ErrInvalidRoomSettings
 	}
+	if err := normalizeExpansions(&settings); err != nil {
+		return err
+	}
 	if len(settings.Bots) > maxPlayers {
 		return gameService.ErrInvalidRoomConfig
 	}
@@ -75,6 +83,28 @@ func normalizeBotSettings(settings *carcassonneDTO.RoomSettings) error {
 	if settings.Bots == nil {
 		settings.Bots = []carcassonneDTO.BotSettings{}
 	}
+	return nil
+}
+
+func normalizeExpansions(settings *carcassonneDTO.RoomSettings) error {
+	seen := make(map[string]struct{}, len(settings.Expansions))
+	expansions := make([]string, 0, len(settings.Expansions))
+	for _, expansion := range settings.Expansions {
+		expansion = strings.TrimSpace(expansion)
+		switch expansion {
+		case "":
+			continue
+		case ExpansionInnsAndCathedrals:
+			if _, ok := seen[expansion]; ok {
+				continue
+			}
+			seen[expansion] = struct{}{}
+			expansions = append(expansions, expansion)
+		default:
+			return gameService.ErrInvalidRoomSettings
+		}
+	}
+	settings.Expansions = expansions
 	return nil
 }
 
