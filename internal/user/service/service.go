@@ -15,6 +15,7 @@ type IRepository interface {
 	GetUserByLogin(ctx context.Context, login string) (*model.User, error)
 	GetUserByID(ctx context.Context, userID string) (*model.User, error)
 	GetCurrentRoomByUserID(ctx context.Context, userID string) (*model.CurrentRoom, error)
+	ListAchievementsByUserID(ctx context.Context, userID string) ([]model.Achievement, error)
 	ListFinishedMatchesByUserID(ctx context.Context, userID string) ([]model.MatchWithPlayers, error)
 	UpdateUserAvatar(ctx context.Context, userID string, avatarPath string) error
 	UpdateUserProfile(ctx context.Context, user model.User) error

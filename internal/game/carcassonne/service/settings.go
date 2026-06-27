@@ -12,7 +12,8 @@ import (
 
 const (
 	minPlayersLimit            = 2
-	maxPlayersLimit            = 6
+	baseMaxPlayersLimit        = 5
+	innsCathedralsPlayersLimit = 6
 	defaultTurnTime            = 120
 	minTurnTimeSeconds         = 30
 	maxTurnTimeSeconds         = 300
@@ -55,7 +56,7 @@ func (e *Engine) NormalizeRoomSettings(raw json.RawMessage) (model.JSONB, error)
 }
 
 func (e *Engine) ValidateRoomConfig(maxPlayers int, rawSettings model.JSONB) error {
-	if maxPlayers < minPlayersLimit || maxPlayers > maxPlayersLimit {
+	if maxPlayers < minPlayersLimit {
 		return gameService.ErrInvalidRoomConfig
 	}
 	var settings carcassonneDTO.RoomSettings
@@ -65,11 +66,23 @@ func (e *Engine) ValidateRoomConfig(maxPlayers int, rawSettings model.JSONB) err
 	if err := normalizeExpansions(&settings); err != nil {
 		return err
 	}
+	if maxPlayers > maxPlayersLimit(settings.Expansions) {
+		return gameService.ErrInvalidRoomConfig
+	}
 	if len(settings.Bots) > maxPlayers {
 		return gameService.ErrInvalidRoomConfig
 	}
 
 	return nil
+}
+
+func maxPlayersLimit(expansions []string) int {
+	for _, expansion := range expansions {
+		if expansion == ExpansionInnsAndCathedrals {
+			return innsCathedralsPlayersLimit
+		}
+	}
+	return baseMaxPlayersLimit
 }
 
 func normalizeBotSettings(settings *carcassonneDTO.RoomSettings) error {

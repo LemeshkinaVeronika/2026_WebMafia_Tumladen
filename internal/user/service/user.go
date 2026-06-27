@@ -232,6 +232,7 @@ func (s *Service) UpdateProfile(ctx context.Context, req dto.UpdateProfileReques
 		Email:        profile.Email,
 		AvatarURL:    profile.AvatarURL,
 		CurrentRoom:  profile.CurrentRoom,
+		Achievements: profile.Achievements,
 		MatchHistory: profile.MatchHistory,
 		Stats:        profile.Stats,
 	}, nil
@@ -261,6 +262,11 @@ func (s *Service) buildProfileResponse(ctx context.Context, user model.User) (*d
 		return nil, err
 	}
 
+	achievements, err := s.repo.ListAchievementsByUserID(ctx, user.ID.String())
+	if err != nil {
+		return nil, err
+	}
+
 	history := make([]dto.MatchHistoryItem, 0, len(matches))
 	statsBuilder := newUserStatsBuilder()
 	for _, match := range matches {
@@ -275,6 +281,7 @@ func (s *Service) buildProfileResponse(ctx context.Context, user model.User) (*d
 		Email:        user.Email,
 		AvatarURL:    user.AvatarURL,
 		CurrentRoom:  currentRoomResponse(currentRoom),
+		Achievements: achievementResponses(achievements),
 		MatchHistory: history,
 		Stats:        statsBuilder.summary(),
 	}, nil
@@ -292,6 +299,27 @@ func currentRoomResponse(room *model.CurrentRoom) *dto.CurrentRoomResponse {
 		GameType:   room.GameType,
 		MatchID:    room.MatchID,
 	}
+}
+
+func achievementResponses(achievements []model.Achievement) []dto.Achievement {
+	resp := make([]dto.Achievement, 0, len(achievements))
+	for _, achievement := range achievements {
+		var unlockedAt *string
+		if achievement.UnlockedAt != nil {
+			value := achievement.UnlockedAt.Format(time.RFC3339)
+			unlockedAt = &value
+		}
+
+		resp = append(resp, dto.Achievement{
+			Code:        achievement.Code,
+			Title:       achievement.Title,
+			Description: achievement.Description,
+			GameType:    achievement.GameType,
+			UnlockedAt:  unlockedAt,
+			MatchID:     achievement.MatchID,
+		})
+	}
+	return resp
 }
 
 type storedMatchResult struct {

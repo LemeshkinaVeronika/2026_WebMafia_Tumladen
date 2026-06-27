@@ -66,6 +66,7 @@ type UpdateProfileResponse struct {
 	Email        string               `json:"email"`
 	AvatarURL    string               `json:"avatarUrl,omitempty"`
 	CurrentRoom  *CurrentRoomResponse `json:"currentRoom,omitempty"`
+	Achievements []Achievement        `json:"achievements"`
 	MatchHistory []MatchHistoryItem   `json:"matchHistory"`
 	Stats        UserGameStatsSummary `json:"stats"`
 }
@@ -79,6 +80,7 @@ type GetProfileResponse struct {
 	Email        string               `json:"email"`
 	AvatarURL    string               `json:"avatarUrl,omitempty"`
 	CurrentRoom  *CurrentRoomResponse `json:"currentRoom,omitempty"`
+	Achievements []Achievement        `json:"achievements"`
 	MatchHistory []MatchHistoryItem   `json:"matchHistory"`
 	Stats        UserGameStatsSummary `json:"stats"`
 }
@@ -90,6 +92,15 @@ type CurrentRoomResponse struct {
 	Status     string  `json:"status"`
 	GameType   string  `json:"gameType"`
 	MatchID    *string `json:"matchId,omitempty"`
+}
+
+type Achievement struct {
+	Code        string  `json:"code"`
+	Title       string  `json:"title"`
+	Description string  `json:"description"`
+	GameType    *string `json:"gameType,omitempty"`
+	UnlockedAt  *string `json:"unlockedAt,omitempty"`
+	MatchID     *string `json:"matchId,omitempty"`
 }
 
 type MatchHistoryItem struct {

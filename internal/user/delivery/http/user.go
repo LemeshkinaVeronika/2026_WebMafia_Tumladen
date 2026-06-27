@@ -51,6 +51,7 @@ type publicProfileResponse struct {
 	ID           string                   `json:"id"`
 	Nickname     string                   `json:"nickname"`
 	AvatarURL    string                   `json:"avatarUrl,omitempty"`
+	Achievements []dto.Achievement        `json:"achievements"`
 	MatchHistory []dto.MatchHistoryItem   `json:"matchHistory"`
 	Stats        dto.UserGameStatsSummary `json:"stats"`
 }
@@ -275,6 +276,7 @@ func (h *Handler) GetPublicProfile(w http.ResponseWriter, r *http.Request) {
 		ID:           res.ID,
 		Nickname:     res.Nickname,
 		AvatarURL:    res.AvatarURL,
+		Achievements: res.Achievements,
 		MatchHistory: res.MatchHistory,
 		Stats:        res.Stats,
 	}

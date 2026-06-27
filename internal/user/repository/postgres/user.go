@@ -119,6 +119,65 @@ func (m *Repository) GetCurrentRoomByUserID(ctx context.Context, userID string) 
 	return &room, nil
 }
 
+func (m *Repository) ListAchievementsByUserID(ctx context.Context, userID string) ([]model.Achievement, error) {
+	const op = "user.repository.postgres.ListAchievementsByUserID"
+
+	query := `
+		SELECT
+			a.code,
+			a.title,
+			a.description,
+			a.game_type,
+			ua.unlocked_at,
+			ua.match_id
+		FROM achievements a
+		LEFT JOIN user_achievements ua
+			ON ua.achievement_code = a.code
+			AND ua.user_id = $1::UUID
+		ORDER BY a.sort_order ASC, a.code ASC
+	`
+
+	rows, err := m.Conn.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("%s: query achievements: %w", op, err)
+	}
+	defer rows.Close()
+
+	achievements := make([]model.Achievement, 0)
+	for rows.Next() {
+		var achievement model.Achievement
+		var gameType sql.NullString
+		var unlockedAt sql.NullTime
+		var matchID sql.NullString
+		if err := rows.Scan(
+			&achievement.Code,
+			&achievement.Title,
+			&achievement.Description,
+			&gameType,
+			&unlockedAt,
+			&matchID,
+		); err != nil {
+			return nil, fmt.Errorf("%s: scan achievement: %w", op, err)
+		}
+		if gameType.Valid {
+			achievement.GameType = &gameType.String
+		}
+		if unlockedAt.Valid {
+			achievement.UnlockedAt = &unlockedAt.Time
+		}
+		if matchID.Valid {
+			achievement.MatchID = &matchID.String
+		}
+		achievements = append(achievements, achievement)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: rows: %w", op, err)
+	}
+
+	return achievements, nil
+}
+
 func (m *Repository) ListFinishedMatchesByUserID(ctx context.Context, userID string) ([]model.MatchWithPlayers, error) {
 	const op = "user.repository.postgres.ListFinishedMatchesByUserID"
 

@@ -458,6 +458,12 @@ func (r *Repository) TerminateActiveMatch(
 		return nil, nil, fmt.Errorf("[%s]: update match failed: %w", op, err)
 	}
 
+	if reason == model.MatchTerminationReasonNormalCompletion {
+		if err := r.unlockMatchAchievementsTx(ctx, tx, match, result, terminatedAt); err != nil {
+			return nil, nil, fmt.Errorf("[%s]: unlock achievements failed: %w", op, err)
+		}
+	}
+
 	updatedAt, err := r.updateRoomStatusTx(ctx, tx, roomID, model.RoomStatusWaiting)
 	if err != nil {
 		return nil, nil, fmt.Errorf("[%s]: update room status failed: %w", op, err)
