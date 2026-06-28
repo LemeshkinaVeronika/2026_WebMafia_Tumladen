@@ -73,6 +73,7 @@ func Load() (*Config, error) {
 				"http://localhost:5173",
 				"http://87.239.104.134:3000",
 				"http://tumladen.online",
+				"https://tumladen.online",
 			}),
 			AllowedMethods: []string{
 				"GET", "POST", "PUT", "DELETE", "OPTIONS",
