@@ -23,9 +23,9 @@ CREATE INDEX IF NOT EXISTS idx_user_achievements_match_id
 
 INSERT INTO achievements (code, title, description, game_type, sort_order)
 VALUES
-    ('first_game_any', 'Первая игра', 'Завершить первую игру в любом режиме.', NULL, 10),
-    ('carcassonne_first_game', 'Первый Каркассон', 'Завершить первую игру в Carcassonne.', 'carcassonne', 20),
-    ('carcassonne_first_win', 'Первая победа в Carcassonne', 'Победить в Carcassonne впервые.', 'carcassonne', 30)
+    ('first_game_any', 'Спасибо, что вы с нами', 'За первую завершённую игру в любом режиме', NULL, 10),
+    ('carcassonne_first_game', 'Мелкий феодал', 'За первую игру в Fortresses & Roads', 'carcassonne', 20),
+    ('carcassonne_first_win', 'Primus inter pares', 'За первую победу в Fortresses & Roads', 'carcassonne', 30)
 ON CONFLICT (code) DO UPDATE
 SET title = EXCLUDED.title,
     description = EXCLUDED.description,
