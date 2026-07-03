@@ -12,5 +12,14 @@ Tumladen - онлайн-платформа для игры в настольны
 
 - **Frontend-часть:** [Tumladen Frontend](https://github.com/poopaapopa/Tumladen-Frontend)
 
+## Запуск проекта
+
+```bash
+git clone https://github.com/LemeshkinaVeronika/2026_WebMafia_Tumladen
+cd 2026_WebMafia_Tumladan
+make docker-build
+make docker-up
+```
+
 ## Реализация
 - [Ссылка на deploy](http://87.239.104.134:8080/)
