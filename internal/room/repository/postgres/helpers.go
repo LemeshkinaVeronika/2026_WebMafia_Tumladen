@@ -213,32 +213,6 @@ func (r *Repository) listMatchPlayersTx(ctx context.Context, tx *sql.Tx, matchID
 	return players, nil
 }
 
-func (r *Repository) updateMatchStateTx(ctx context.Context, tx *sql.Tx, matchID string, state model.JSONB, status model.MatchStatus, result *model.JSONB) error {
-	query := `
-		UPDATE matches
-		SET game_state = $2,
-		    status = $3,
-		    result = $4,
-		    updated_at = NOW()
-		WHERE id = $1
-	`
-
-	res, err := tx.ExecContext(ctx, query, matchID, state, status, result)
-	if err != nil {
-		return err
-	}
-
-	rowsAffected, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if rowsAffected == 0 {
-		return ErrNotFound
-	}
-
-	return nil
-}
-
 func (r *Repository) terminateMatchTx(
 	ctx context.Context,
 	tx *sql.Tx,
@@ -275,63 +249,6 @@ func (r *Repository) terminateMatchTx(
 	}
 
 	return nil
-}
-
-func (r *Repository) unlockMatchAchievementsTx(
-	ctx context.Context,
-	tx *sql.Tx,
-	match *model.Match,
-	result *model.JSONB,
-	unlockedAt time.Time,
-) error {
-	if match == nil {
-		return nil
-	}
-
-	var resultArg any
-	if result != nil {
-		resultArg = string(*result)
-	}
-
-	query := `
-		WITH players AS (
-			SELECT u.id AS user_id, mp.actor_id
-			FROM match_players mp
-			JOIN users u ON u.id::TEXT = mp.actor_id
-			WHERE mp.match_id = $1
-			  AND mp.actor_type = 'user'
-		),
-		eligible_unlocks AS (
-			SELECT
-				p.user_id,
-				unlocks.achievement_code
-			FROM players p
-			CROSS JOIN LATERAL (
-				VALUES
-					($5, TRUE),
-					($6, $2 = 'carcassonne'),
-					($7, $2 = 'carcassonne' AND COALESCE($3::JSONB->'winners', '[]'::JSONB) ? p.actor_id)
-			) AS unlocks(achievement_code, is_eligible)
-			WHERE unlocks.is_eligible
-		)
-		INSERT INTO user_achievements (user_id, achievement_code, match_id, unlocked_at)
-		SELECT user_id, achievement_code, $1, $4
-		FROM eligible_unlocks
-		ON CONFLICT (user_id, achievement_code) DO NOTHING
-	`
-
-	_, err := tx.ExecContext(
-		ctx,
-		query,
-		match.ID,
-		match.GameType,
-		resultArg,
-		unlockedAt,
-		model.AchievementFirstGameAny,
-		model.AchievementCarcassonneFirstGame,
-		model.AchievementCarcassonneFirstWin,
-	)
-	return err
 }
 
 func (r *Repository) updateRoomStatusTx(ctx context.Context, tx *sql.Tx, roomID string, status model.RoomStatus) (time.Time, error) {

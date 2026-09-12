@@ -6,13 +6,13 @@ import (
 )
 
 type Ticket struct {
-	Value       string
-	SessionID   string
-	ActorID     string
-	ActorType   string
-	DisplayName string
-	ExpiresAt   time.Time
-	Reserved    bool
+	Value       string    `json:"value"`
+	SessionID   string    `json:"sessionId"`
+	ActorID     string    `json:"actorId"`
+	ActorType   string    `json:"actorType"`
+	DisplayName string    `json:"displayName"`
+	ExpiresAt   time.Time `json:"expiresAt"`
+	Reserved    bool      `json:"reserved"`
 }
 
 type Store struct {

@@ -44,6 +44,13 @@ type Handler struct {
 	httpStreamHandler http.Handler
 	sseHandler        http.Handler
 	emulationHandler  http.Handler
+	redisShard        *centrifuge.RedisShard
+}
+
+type RedisConfig struct {
+	Address        string
+	KeyPrefix      string
+	ConnectTimeout time.Duration
 }
 
 type MessageHandler struct {
@@ -81,12 +88,41 @@ func NewHandler(
 	ticketService *wsticket.Service,
 	games *gameService.Facade,
 	cors middleware.CORSConfig,
+	redisConfig RedisConfig,
 	logger logger.Logger,
 ) (*Handler, error) {
 	node, err := centrifuge.New(centrifuge.Config{})
 	if err != nil {
 		return nil, err
 	}
+
+	redisShard, err := centrifuge.NewRedisShard(node, centrifuge.RedisShardConfig{
+		Address:        redisConfig.Address,
+		ClientName:     "tumladan-realtime",
+		ConnectTimeout: redisConfig.ConnectTimeout,
+	})
+	if err != nil {
+		return nil, err
+	}
+	broker, err := centrifuge.NewRedisBroker(node, centrifuge.RedisBrokerConfig{
+		Prefix: redisConfig.KeyPrefix + ":centrifuge",
+		Shards: []*centrifuge.RedisShard{redisShard},
+	})
+	if err != nil {
+		redisShard.Close()
+		return nil, err
+	}
+	presence, err := centrifuge.NewRedisPresenceManager(node, centrifuge.RedisPresenceManagerConfig{
+		Prefix:            redisConfig.KeyPrefix + ":centrifuge",
+		Shards:            []*centrifuge.RedisShard{redisShard},
+		EnableUserMapping: func(string) bool { return true },
+	})
+	if err != nil {
+		redisShard.Close()
+		return nil, err
+	}
+	node.SetBroker(broker)
+	node.SetPresenceManager(presence)
 
 	h := &Handler{
 		roomService:   roomService,
@@ -96,6 +132,7 @@ func NewHandler(
 		node:          node,
 		registry:      NewRegistry(),
 		logger:        logger,
+		redisShard:    redisShard,
 	}
 	h.turnTimers = newTurnTimerManager(matchService, logger)
 	h.turnTimers.SetApplyCallback(func(ctx context.Context, roomID string, matchState *matchDTO.MatchResponse) {
@@ -146,7 +183,11 @@ func (h *Handler) Run() error {
 
 func (h *Handler) Shutdown(ctx context.Context) error {
 	h.turnTimers.StopAll()
-	return h.node.Shutdown(ctx)
+	err := h.node.Shutdown(ctx)
+	if h.redisShard != nil {
+		h.redisShard.Close()
+	}
+	return err
 }
 
 func (h *Handler) RegisterRoutes(r chi.Router) {
@@ -314,6 +355,14 @@ func (h *MessageHandler) OnDisconnect(client *centrifuge.Client, event centrifug
 	if state.RoomID != "" && !h.registry.HasLocalClientForActor(state.RoomID, state.Actor.ID) {
 		disconnectCtx, cancel := context.WithTimeout(context.WithoutCancel(client.Context()), 5*time.Second)
 		defer cancel()
+		presence, err := h.node.PresenceStats(roomPrivateChannel(state.RoomID, state.Actor.ID))
+		if err != nil {
+			h.loggerFromContext(disconnectCtx).With("roomID", state.RoomID, "actorID", state.Actor.ID, "error", err).Warnf("load distributed presence failed")
+			return
+		}
+		if presence.NumClients > 0 {
+			return
+		}
 
 		if err := h.roomService.MarkActorDisconnectedInActiveMatch(disconnectCtx, state.RoomID, state.Actor.ID); err != nil {
 			h.loggerFromContext(disconnectCtx).With("roomID", state.RoomID, "actorID", state.Actor.ID, "error", err).Warnf("mark actor disconnected failed")
@@ -693,9 +742,8 @@ func (h *MessageHandler) sendMatchState(state *ConnectionState, matchState *matc
 }
 
 func (h *MessageHandler) broadcastMatchState(ctx context.Context, roomID string, matchState *matchDTO.MatchResponse) {
-	for _, state := range h.registry.LocalStatesForRoom(roomID) {
-		h.sendMatchState(state, matchState)
-	}
+	h.broadcastMatchEvent(ctx, roomID, "match_state", h.publicMatchStatePayload(ctx, matchState))
+	h.broadcastPrivateMatchState(ctx, roomID, matchState)
 }
 
 func (h *MessageHandler) sendActiveMatchStateIfExists(ctx context.Context, state *ConnectionState, roomID string) {
@@ -866,7 +914,7 @@ func (h *MessageHandler) handleLeaveMatch(ctx context.Context, state *Connection
 
 	h.turnTimers.Stop(p.RoomID)
 	h.broadcastMatchFinished(ctx, p.RoomID)
-	h.disconnectLocalActorConnections(p.RoomID, state.Actor.ID)
+	h.disconnectActorConnections(ctx, p.RoomID, state.Actor.ID)
 }
 
 func (h *MessageHandler) handleDeleteRoom(ctx context.Context, state *ConnectionState, payload any) {
@@ -998,20 +1046,20 @@ func (h *MessageHandler) handleKickParticipant(ctx context.Context, state *Conne
 		h.publishWithOptions(ctx, roomPrivateChannel(p.RoomID, p.TargetActorID), kickNotice, centrifuge.WithHistory(1, roomHistoryTTL))
 	}
 
-	h.disconnectLocalActorConnections(p.RoomID, p.TargetActorID)
+	h.disconnectActorConnections(ctx, p.RoomID, p.TargetActorID)
 
 	h.broadcastRoomState(ctx, p.RoomID, roomState)
 }
 
 func (h *MessageHandler) subscribeToRoom(client *centrifuge.Client, roomID, actorID string) error {
-	if err := client.Subscribe(roomChannel(roomID), centrifuge.WithRecovery(true), centrifuge.WithPositioning(true)); err != nil {
+	if err := client.Subscribe(roomChannel(roomID), centrifuge.WithRecovery(true), centrifuge.WithPositioning(true), centrifuge.WithEmitPresence(true)); err != nil {
 		return err
 	}
-	if err := client.Subscribe(matchChannel(roomID), centrifuge.WithRecovery(true), centrifuge.WithPositioning(true)); err != nil {
+	if err := client.Subscribe(matchChannel(roomID), centrifuge.WithRecovery(true), centrifuge.WithPositioning(true), centrifuge.WithEmitPresence(true)); err != nil {
 		client.Unsubscribe(roomChannel(roomID))
 		return err
 	}
-	if err := client.Subscribe(roomPrivateChannel(roomID, actorID), centrifuge.WithRecovery(true), centrifuge.WithPositioning(true)); err != nil {
+	if err := client.Subscribe(roomPrivateChannel(roomID, actorID), centrifuge.WithRecovery(true), centrifuge.WithPositioning(true), centrifuge.WithEmitPresence(true)); err != nil {
 		client.Unsubscribe(matchChannel(roomID))
 		client.Unsubscribe(roomChannel(roomID))
 		return err
@@ -1019,9 +1067,9 @@ func (h *MessageHandler) subscribeToRoom(client *centrifuge.Client, roomID, acto
 	return nil
 }
 
-func (h *MessageHandler) disconnectLocalActorConnections(roomID, actorID string) {
-	for _, kickedClient := range h.registry.LocalClientsForActor(roomID, actorID) {
-		kickedClient.Disconnect(disconnectKicked)
+func (h *MessageHandler) disconnectActorConnections(ctx context.Context, roomID, actorID string) {
+	if err := h.node.Disconnect(actorID, centrifuge.WithCustomDisconnect(disconnectKicked)); err != nil {
+		h.loggerFromContext(ctx).With("roomID", roomID, "actorID", actorID, "error", err).Warnf("disconnect actor connections failed")
 	}
 }
 

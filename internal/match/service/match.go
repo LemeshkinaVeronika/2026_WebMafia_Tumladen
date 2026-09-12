@@ -73,8 +73,12 @@ func (s *Service) GetActiveByRoomID(ctx context.Context, roomID string) (*dto.Ma
 }
 
 func (s *Service) ApplyAction(ctx context.Context, req dto.ApplyMatchActionRequest) (*dto.MatchResponse, error) {
-	unlock := s.roomLocks.Lock(req.RoomID)
+	lockedCtx, unlock, err := s.roomLocks.Lock(ctx, req.RoomID)
+	if err != nil {
+		return nil, err
+	}
 	defer unlock()
+	ctx = lockedCtx
 
 	match, players, err := s.repo.GetActiveByRoomID(ctx, req.RoomID)
 	if err != nil {
@@ -109,8 +113,12 @@ func (s *Service) ApplyAction(ctx context.Context, req dto.ApplyMatchActionReque
 }
 
 func (s *Service) ApplyTurnTimeout(ctx context.Context, req dto.ApplyTurnTimeoutRequest) (*dto.MatchResponse, error) {
-	unlock := s.roomLocks.Lock(req.RoomID)
+	lockedCtx, unlock, err := s.roomLocks.Lock(ctx, req.RoomID)
+	if err != nil {
+		return nil, err
+	}
 	defer unlock()
+	ctx = lockedCtx
 
 	match, players, err := s.repo.GetActiveByRoomID(ctx, req.RoomID)
 	if err != nil {

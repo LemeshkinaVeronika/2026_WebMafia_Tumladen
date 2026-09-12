@@ -249,6 +249,42 @@ func (m *Repository) ListFinishedMatchesByUserID(ctx context.Context, userID str
 	return matches, nil
 }
 
+func (m *Repository) ListGameStatsByUserID(ctx context.Context, userID string) ([]model.UserGameStats, error) {
+	const op = "user.repository.postgres.ListGameStatsByUserID"
+
+	rows, err := m.Conn.QueryContext(ctx, `
+		SELECT game_type, matches, wins, losses, draws, total_score, best_score
+		FROM user_game_stats
+		WHERE user_id = $1
+		ORDER BY game_type
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("%s: query: %w", op, err)
+	}
+	defer rows.Close()
+
+	stats := make([]model.UserGameStats, 0)
+	for rows.Next() {
+		var item model.UserGameStats
+		if err := rows.Scan(
+			&item.GameType,
+			&item.Matches,
+			&item.Wins,
+			&item.Losses,
+			&item.Draws,
+			&item.TotalScore,
+			&item.BestScore,
+		); err != nil {
+			return nil, fmt.Errorf("%s: scan: %w", op, err)
+		}
+		stats = append(stats, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: rows: %w", op, err)
+	}
+	return stats, nil
+}
+
 func (m *Repository) listMatchPlayers(ctx context.Context, matchID string) ([]model.MatchPlayer, error) {
 	query := `
 		SELECT mp.match_id, mp.actor_id, mp.actor_type, mp.display_name, COALESCE(mp.bot_difficulty, ''), COALESCE(u.avatar_url, ''), mp.seat, mp.disconnected_at

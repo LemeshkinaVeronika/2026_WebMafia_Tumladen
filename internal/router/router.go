@@ -20,7 +20,6 @@ type AppHandlers struct {
 	CarcassonneHandler *carcassonneDelivery.Handler
 	RoomHandler        *roomDelivery.Handler
 	WSHandler          *internalws.Handler
-	cors               middleware.CORSConfig
 	WSTicketHandler    *wsticketDelivery.Handler
 }
 
@@ -33,6 +32,11 @@ func NewRouter(handlers AppHandlers, healthHandler http.HandlerFunc, auth *middl
 	}
 
 	r.Get("/health", healthHandler)
+	r.Get("/ready", healthHandler)
+	r.Get("/live", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
 
 	if handlers.WSHandler != nil {
 		handlers.WSHandler.RegisterRoutes(r)

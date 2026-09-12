@@ -1,0 +1,14 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: tumladan-api
+  namespace: tumladan
+  labels:
+    app.kubernetes.io/name: tumladan-api
+    app.kubernetes.io/part-of: tumladan
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tumladan-api
+

@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tumladan-event-worker
+  namespace: tumladan
+  labels:
+    app.kubernetes.io/name: tumladan-event-worker
+    app.kubernetes.io/component: worker
+    app.kubernetes.io/part-of: tumladan
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: tumladan-event-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: tumladan-event-worker
+        app.kubernetes.io/component: worker
+        app.kubernetes.io/part-of: tumladan
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: event-worker
+          image: ghcr.io/lemeshkinaveronika/2026_webmafia_tumladan:latest
+          imagePullPolicy: IfNotPresent
+          command: ["/worker"]
+          envFrom:
+            - configMapRef:
+                name: tumladan-config
+            - secretRef:
+                name: tumladan-secrets
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
+

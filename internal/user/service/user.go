@@ -266,13 +266,15 @@ func (s *Service) buildProfileResponse(ctx context.Context, user model.User) (*d
 	if err != nil {
 		return nil, err
 	}
+	gameStats, err := s.repo.ListGameStatsByUserID(ctx, user.ID.String())
+	if err != nil {
+		return nil, err
+	}
 
 	history := make([]dto.MatchHistoryItem, 0, len(matches))
-	statsBuilder := newUserStatsBuilder()
 	for _, match := range matches {
 		item := matchHistoryItem(match)
 		history = append(history, item)
-		statsBuilder.add(item, user.ID.String())
 	}
 
 	return &dto.GetProfileResponse{
@@ -283,8 +285,35 @@ func (s *Service) buildProfileResponse(ctx context.Context, user model.User) (*d
 		CurrentRoom:  currentRoomResponse(currentRoom),
 		Achievements: achievementResponses(achievements),
 		MatchHistory: history,
-		Stats:        statsBuilder.summary(),
+		Stats:        projectedStatsSummary(gameStats),
 	}, nil
+}
+
+func projectedStatsSummary(rows []model.UserGameStats) dto.UserGameStatsSummary {
+	summary := dto.UserGameStatsSummary{ByGame: make([]dto.UserGameStats, 0, len(rows))}
+	for _, row := range rows {
+		stats := dto.UserGameStats{
+			GameType:   row.GameType,
+			Matches:    row.Matches,
+			Wins:       row.Wins,
+			Losses:     row.Losses,
+			Draws:      row.Draws,
+			TotalScore: row.TotalScore,
+			BestScore:  row.BestScore,
+		}
+		normalizeStats(&stats)
+		summary.ByGame = append(summary.ByGame, stats)
+		summary.Overall.Matches += row.Matches
+		summary.Overall.Wins += row.Wins
+		summary.Overall.Losses += row.Losses
+		summary.Overall.Draws += row.Draws
+		summary.Overall.TotalScore += row.TotalScore
+		if row.BestScore > summary.Overall.BestScore {
+			summary.Overall.BestScore = row.BestScore
+		}
+	}
+	normalizeStats(&summary.Overall)
+	return summary
 }
 
 func currentRoomResponse(room *model.CurrentRoom) *dto.CurrentRoomResponse {
@@ -425,78 +454,6 @@ func assignRanks(players []dto.MatchHistoryPlayerScore) {
 
 	for i := range players {
 		players[i].Rank = rankByActorID[players[i].ActorID]
-	}
-}
-
-type userStatsBuilder struct {
-	overall dto.UserGameStats
-	byGame  map[string]*dto.UserGameStats
-}
-
-func newUserStatsBuilder() *userStatsBuilder {
-	return &userStatsBuilder{
-		byGame: make(map[string]*dto.UserGameStats),
-	}
-}
-
-func (b *userStatsBuilder) add(match dto.MatchHistoryItem, userID string) {
-	if !match.Result.HasResult {
-		return
-	}
-
-	var userScore *dto.MatchHistoryPlayerScore
-	for i := range match.Players {
-		if match.Players[i].ActorID == userID {
-			userScore = &match.Players[i]
-			break
-		}
-	}
-	if userScore == nil {
-		return
-	}
-
-	b.addToStats(&b.overall, match, *userScore)
-	gameStats := b.byGame[match.GameType]
-	if gameStats == nil {
-		gameStats = &dto.UserGameStats{GameType: match.GameType}
-		b.byGame[match.GameType] = gameStats
-	}
-	b.addToStats(gameStats, match, *userScore)
-}
-
-func (b *userStatsBuilder) addToStats(stats *dto.UserGameStats, match dto.MatchHistoryItem, userScore dto.MatchHistoryPlayerScore) {
-	stats.Matches++
-	stats.TotalScore += userScore.Score
-	if stats.Matches == 1 || userScore.Score > stats.BestScore {
-		stats.BestScore = userScore.Score
-	}
-
-	if userScore.IsWinner {
-		if len(match.Result.Winners) > 1 {
-			stats.Draws++
-		} else {
-			stats.Wins++
-		}
-	} else {
-		stats.Losses++
-	}
-}
-
-func (b *userStatsBuilder) summary() dto.UserGameStatsSummary {
-	normalizeStats(&b.overall)
-
-	byGame := make([]dto.UserGameStats, 0, len(b.byGame))
-	for _, stats := range b.byGame {
-		normalizeStats(stats)
-		byGame = append(byGame, *stats)
-	}
-	sort.Slice(byGame, func(i, j int) bool {
-		return byGame[i].GameType < byGame[j].GameType
-	})
-
-	return dto.UserGameStatsSummary{
-		Overall: b.overall,
-		ByGame:  byGame,
 	}
 }
 

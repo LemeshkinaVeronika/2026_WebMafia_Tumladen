@@ -1,6 +1,9 @@
 package service
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 type roomLocks struct {
 	mu    sync.Mutex
@@ -13,7 +16,7 @@ func newRoomLocks() *roomLocks {
 	}
 }
 
-func (l *roomLocks) Lock(roomID string) func() {
+func (l *roomLocks) Lock(ctx context.Context, roomID string) (context.Context, func(), error) {
 	l.mu.Lock()
 
 	lock, ok := l.locks[roomID]
@@ -26,7 +29,7 @@ func (l *roomLocks) Lock(roomID string) func() {
 
 	lock.Lock()
 
-	return func() {
+	return ctx, func() {
 		lock.Unlock()
-	}
+	}, nil
 }

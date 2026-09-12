@@ -1,0 +1,17 @@
+.git
+.github
+.idea
+.codex
+
+.env
+.env.*
+
+bin
+build
+dist
+coverage.out
+coverage.html
+
+docs
+Starting
+*.log

@@ -3,7 +3,6 @@ package service
 import (
 	"encoding/json"
 	"fmt"
-	"slices"
 
 	carcassonneAssets "github.com/webmafia/tumladan/internal/game/carcassonne/assets"
 	carcassonneDTO "github.com/webmafia/tumladan/internal/game/carcassonne/dto"
@@ -297,17 +296,4 @@ func validateEdgeSegments(def carcassonneDTO.TileDefinition, segmentTypes map[ca
 	}
 
 	return nil
-}
-
-func sortTileDefinitions(definitions []carcassonneDTO.TileDefinition) {
-	slices.SortFunc(definitions, func(a, b carcassonneDTO.TileDefinition) int {
-		switch {
-		case a.TileID < b.TileID:
-			return -1
-		case a.TileID > b.TileID:
-			return 1
-		default:
-			return 0
-		}
-	})
 }

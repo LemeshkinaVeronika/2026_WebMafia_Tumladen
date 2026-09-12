@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/redis/rueidis"
 	carcassonneHTTP "github.com/webmafia/tumladan/internal/game/carcassonne/delivery/http"
 	carcassonneService "github.com/webmafia/tumladan/internal/game/carcassonne/service"
 	gameService "github.com/webmafia/tumladan/internal/game/service"
@@ -35,18 +36,21 @@ import (
 	"github.com/webmafia/tumladan/pkg/logger"
 	miniostore "github.com/webmafia/tumladan/pkg/minio"
 	"github.com/webmafia/tumladan/pkg/postgres"
+	redisclient "github.com/webmafia/tumladan/pkg/redis"
 )
 
 type App struct {
-	cfg      *Config
-	logger   logger.Logger
-	server   *http.Server
-	db       *sql.DB
-	ctx      context.Context
-	stop     context.CancelFunc
-	guestSvc *guestService.Service
-	roomSvc  *roomService.Service
-	ws       *internalws.Handler
+	cfg         *Config
+	logger      logger.Logger
+	server      *http.Server
+	db          *sql.DB
+	redis       rueidis.Client
+	matchLocker *matchService.RedisRoomLocker
+	ctx         context.Context
+	stop        context.CancelFunc
+	guestSvc    *guestService.Service
+	roomSvc     *roomService.Service
+	ws          *internalws.Handler
 }
 
 func New(ctx context.Context) (*App, error) {
@@ -73,6 +77,25 @@ func New(ctx context.Context) (*App, error) {
 		return nil, err
 	}
 
+	redisClient, err := redisclient.New(ctx, cfg.Redis)
+	if err != nil {
+		stop()
+		_ = db.Close()
+		return nil, err
+	}
+	matchLocker, err := matchService.NewRedisRoomLocker(cfg.Redis.URL, cfg.Redis.KeyPrefix)
+	if err != nil {
+		stop()
+		redisClient.Close()
+		_ = db.Close()
+		return nil, err
+	}
+	closeDependencies := func() {
+		matchLocker.Close()
+		redisClient.Close()
+		_ = db.Close()
+	}
+
 	jwtProvider := jwtprovider.New(cfg.JWTSecret, cfg.JWTTTL)
 	authMiddleware := middleware.NewAuth(jwtProvider)
 	csrfManager := csrfmanager.NewManager(cfg.CSRFSecret, cfg.CSRFTTL)
@@ -81,7 +104,7 @@ func New(ctx context.Context) (*App, error) {
 	carcassonneEngine, err := carcassonneService.NewEngine()
 	if err != nil {
 		stop()
-		_ = db.Close()
+		closeDependencies()
 		return nil, err
 	}
 	carcassonneHandler := carcassonneHTTP.NewHandler(carcassonneEngine)
@@ -89,7 +112,7 @@ func New(ctx context.Context) (*App, error) {
 	gamesRegistry, err := gameService.NewRegistry(carcassonneEngine)
 	if err != nil {
 		stop()
-		_ = db.Close()
+		closeDependencies()
 		return nil, err
 	}
 	gamesFacade := gameService.NewFacade(gamesRegistry)
@@ -123,21 +146,25 @@ func New(ctx context.Context) (*App, error) {
 	roomHandler := roomHTTP.NewHandler(roomSvc)
 
 	matchRepo := matchPostgres.New(db)
-	matchSvc := matchService.New(matchRepo, roomSvc, gamesFacade)
+	matchSvc := matchService.NewWithRoomLocker(matchRepo, roomSvc, gamesFacade, matchLocker)
 
-	wsTicketStore := wsticketStore.NewStore(1 * time.Minute)
+	wsTicketStore := wsticketStore.NewRedisStore(redisClient, cfg.WSTicketTTL, cfg.Redis.KeyPrefix)
 	wsTicketSvc := wsticketService.NewService(wsTicketStore)
 	wsTicketHandler := wsticketHTTP.NewHandler(wsTicketSvc)
 
-	wsHandler, err := internalws.NewHandler(roomSvc, matchSvc, wsTicketSvc, gamesFacade, cfg.CORS, logger)
+	wsHandler, err := internalws.NewHandler(roomSvc, matchSvc, wsTicketSvc, gamesFacade, cfg.CORS, internalws.RedisConfig{
+		Address:        cfg.Redis.URL,
+		KeyPrefix:      cfg.Redis.KeyPrefix,
+		ConnectTimeout: cfg.Redis.Timeout,
+	}, logger)
 	if err != nil {
 		stop()
-		_ = db.Close()
+		closeDependencies()
 		return nil, err
 	}
 	if err := wsHandler.Run(); err != nil {
 		stop()
-		_ = db.Close()
+		closeDependencies()
 		return nil, err
 	}
 
@@ -150,7 +177,7 @@ func New(ctx context.Context) (*App, error) {
 			WSHandler:          wsHandler,
 			WSTicketHandler:    wsTicketHandler,
 		},
-		healthHandler(logger, db),
+		healthHandler(logger, db, redisClient),
 		authMiddleware,
 		csrfMiddleware,
 		logger,
@@ -164,22 +191,28 @@ func New(ctx context.Context) (*App, error) {
 	}
 
 	return &App{
-		cfg:      cfg,
-		logger:   logger,
-		server:   server,
-		db:       db,
-		ctx:      ctx,
-		stop:     stop,
-		guestSvc: guestSvc,
-		roomSvc:  roomSvc,
-		ws:       wsHandler,
+		cfg:         cfg,
+		logger:      logger,
+		server:      server,
+		db:          db,
+		redis:       redisClient,
+		matchLocker: matchLocker,
+		ctx:         ctx,
+		stop:        stop,
+		guestSvc:    guestSvc,
+		roomSvc:     roomSvc,
+		ws:          wsHandler,
 	}, nil
 }
 
 func (a *App) Run() error {
 	defer a.stop()
 	defer a.db.Close()
-	defer a.logger.Sync()
+	defer a.redis.Close()
+	defer a.matchLocker.Close()
+	defer func() {
+		_ = a.logger.Sync()
+	}()
 
 	a.logger.Infof("starting server env=%s addr=%s", a.cfg.AppEnv, a.cfg.HTTPAddress())
 
@@ -267,7 +300,7 @@ func newLogger(cfg *Config) logger.Logger {
 	return log
 }
 
-func healthHandler(logger logger.Logger, db *sql.DB) http.HandlerFunc {
+func healthHandler(logger logger.Logger, db *sql.DB, redisClient rueidis.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
@@ -275,6 +308,11 @@ func healthHandler(logger logger.Logger, db *sql.DB) http.HandlerFunc {
 		if err := db.PingContext(ctx); err != nil {
 			middleware.LoggerFromContextOr(ctx, logger).With("error", err).Errorf("healthcheck failed")
 			http.Error(w, "db unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		if err := redisClient.Do(ctx, redisClient.B().Ping().Build()).Error(); err != nil {
+			middleware.LoggerFromContextOr(ctx, logger).With("error", err).Errorf("redis healthcheck failed")
+			http.Error(w, "redis unavailable", http.StatusServiceUnavailable)
 			return
 		}
 

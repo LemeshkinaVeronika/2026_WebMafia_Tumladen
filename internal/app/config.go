@@ -11,6 +11,7 @@ import (
 	"github.com/webmafia/tumladan/internal/middleware"
 	"github.com/webmafia/tumladan/pkg/minio"
 	"github.com/webmafia/tumladan/pkg/postgres"
+	redisclient "github.com/webmafia/tumladan/pkg/redis"
 )
 
 type Config struct {
@@ -25,8 +26,10 @@ type Config struct {
 	RoomCleanupInterval   time.Duration
 	RoomWaitingCleanupTTL time.Duration
 	RoomPlayingCleanupTTL time.Duration
+	WSTicketTTL           time.Duration
 	Postgres              postgres.Config
 	MinIO                 minio.Config
+	Redis                 redisclient.Config
 	CORS                  middleware.CORSConfig
 }
 
@@ -48,6 +51,7 @@ func Load() (*Config, error) {
 		RoomCleanupInterval:   getEnvDuration("ROOM_CLEANUP_INTERVAL", 30*time.Second),
 		RoomWaitingCleanupTTL: getEnvDuration("ROOM_WAITING_CLEANUP_TTL", 15*time.Minute),
 		RoomPlayingCleanupTTL: getEnvDuration("ROOM_PLAYING_CLEANUP_TTL", 3*time.Minute),
+		WSTicketTTL:           getEnvDuration("WS_TICKET_TTL", time.Minute),
 		Postgres: postgres.Config{
 			Host:            getEnv("DB_HOST", "postgres"),
 			Port:            getEnvInt("DB_PORT", 5432),
@@ -66,6 +70,11 @@ func Load() (*Config, error) {
 			Bucket:       getEnv("MINIO_BUCKET", "tumladan-assets"),
 			AvatarBucket: getEnv("MINIO_AVATAR_BUCKET", "tumladan-avatars"),
 			UseSSL:       getEnvBool("MINIO_USE_SSL", false),
+		},
+		Redis: redisclient.Config{
+			URL:       getEnv("REDIS_URL", "redis://localhost:6379/0"),
+			KeyPrefix: getEnv("REDIS_KEY_PREFIX", "tumladan"),
+			Timeout:   getEnvDuration("REDIS_TIMEOUT", 2*time.Second),
 		},
 		CORS: middleware.CORSConfig{
 			AllowedOrigins: getEnvCSV("CORS_ALLOWED_ORIGINS", []string{

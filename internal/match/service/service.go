@@ -20,11 +20,23 @@ type MatchTerminator interface {
 	FinishRoomMatch(ctx context.Context, req roomDTO.FinishRoomMatchRequest) error
 }
 
+type RoomLocker interface {
+	Lock(ctx context.Context, roomID string) (context.Context, func(), error)
+}
+
 type Service struct {
 	repo       IRepository
 	terminator MatchTerminator
 	games      *gameService.Facade
-	roomLocks  *roomLocks
+	roomLocks  RoomLocker
+}
+
+func NewWithRoomLocker(repo IRepository, terminator MatchTerminator, games *gameService.Facade, roomLocker RoomLocker) *Service {
+	service := New(repo, terminator, games)
+	if roomLocker != nil {
+		service.roomLocks = roomLocker
+	}
+	return service
 }
 
 func New(repo IRepository, terminator MatchTerminator, games *gameService.Facade) *Service {

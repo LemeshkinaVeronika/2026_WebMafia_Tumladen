@@ -2,11 +2,15 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
+	"github.com/webmafia/tumladan/internal/event"
 	"github.com/webmafia/tumladan/internal/model"
+	"github.com/webmafia/tumladan/internal/outbox"
+	outboxPostgres "github.com/webmafia/tumladan/internal/outbox/repository/postgres"
 )
 
 func (r *Repository) Create(ctx context.Context, room *model.Room) error {
@@ -458,10 +462,23 @@ func (r *Repository) TerminateActiveMatch(
 		return nil, nil, fmt.Errorf("[%s]: update match failed: %w", op, err)
 	}
 
-	if reason == model.MatchTerminationReasonNormalCompletion {
-		if err := r.unlockMatchAchievementsTx(ctx, tx, match, result, terminatedAt); err != nil {
-			return nil, nil, fmt.Errorf("[%s]: unlock achievements failed: %w", op, err)
-		}
+	matchEvent, err := event.NewMatchFinished(match, players, result, reason, terminatedAt)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: build match event failed: %w", op, err)
+	}
+	payload, err := json.Marshal(matchEvent)
+	if err != nil {
+		return nil, nil, fmt.Errorf("[%s]: marshal match event failed: %w", op, err)
+	}
+	if err := outboxPostgres.InsertTx(ctx, tx, outbox.Event{
+		ID:        matchEvent.ID,
+		Topic:     event.MatchEventsTopic,
+		Key:       match.ID,
+		Type:      matchEvent.Type,
+		Payload:   payload,
+		CreatedAt: terminatedAt,
+	}); err != nil {
+		return nil, nil, fmt.Errorf("[%s]: persist match event failed: %w", op, err)
 	}
 
 	updatedAt, err := r.updateRoomStatusTx(ctx, tx, roomID, model.RoomStatusWaiting)
