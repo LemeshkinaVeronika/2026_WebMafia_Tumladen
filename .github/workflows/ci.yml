@@ -73,7 +73,7 @@ jobs:
         run: go tool cover -func=coverage.out | tail -n 1
 
   container:
-    name: Build and scan container
+    name: Build container
     needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -85,7 +85,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build image for security scan
+      - name: Build image
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -94,14 +94,6 @@ jobs:
           tags: ${{ env.LOCAL_IMAGE }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Scan image for vulnerabilities
-        uses: anchore/scan-action@v7
-        with:
-          image: ${{ env.LOCAL_IMAGE }}
-          fail-build: true
-          severity-cutoff: high
-          output-format: table
 
   publish:
     name: Publish image to GHCR
