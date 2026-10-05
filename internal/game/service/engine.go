@@ -40,4 +40,14 @@ type ApplyActionResult struct {
 	NextState  model.JSONB
 	NextStatus model.MatchStatus
 	Result     *model.JSONB
+	Events     []GameEvent
+}
+
+// GameEvent describes a transient domain event produced while applying an
+// action. Events are delivered together with the resulting match snapshot and
+// are intentionally not persisted as part of the game state.
+type GameEvent struct {
+	ID      string          `json:"id"`
+	Type    string          `json:"type"`
+	Payload json.RawMessage `json:"payload"`
 }

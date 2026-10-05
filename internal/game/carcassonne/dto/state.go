@@ -129,3 +129,49 @@ type FinalScore struct {
 	ActorID string `json:"actorId"`
 	Score   int    `json:"score"`
 }
+
+const EventTypeFeatureScored = "feature_scored"
+
+type ScoringPhase string
+
+const (
+	ScoringPhaseTurn  ScoringPhase = "turn"
+	ScoringPhaseFinal ScoringPhase = "final"
+)
+
+type FeatureScoreContribution struct {
+	TileInstanceID string `json:"tileInstanceId"`
+	ZoneID         string `json:"zoneId"`
+	Points         int    `json:"points"`
+}
+
+type FeatureScoreAward struct {
+	ActorID string `json:"actorId"`
+	Points  int    `json:"points"`
+}
+
+type FeatureScoreContributingCity struct {
+	AnchorTileInstanceID string   `json:"anchorTileInstanceId"`
+	AnchorZoneID         string   `json:"anchorZoneId"`
+	TileInstanceIDs      []string `json:"tileInstanceIds"`
+}
+
+type FeatureScoreMarker struct {
+	ActorID        string `json:"actorId"`
+	TileInstanceID string `json:"tileInstanceId"`
+	ZoneID         string `json:"zoneId"`
+	Points         int    `json:"points"`
+}
+
+type FeatureScoredEventPayload struct {
+	TurnNumber           int                            `json:"turnNumber"`
+	FeatureType          ZoneType                       `json:"featureType"`
+	ScoringPhase         ScoringPhase                   `json:"scoringPhase,omitempty"`
+	AnchorTileInstanceID string                         `json:"anchorTileInstanceId"`
+	Contributions        []FeatureScoreContribution     `json:"contributions"`
+	TotalPoints          int                            `json:"totalPoints"`
+	Awards               []FeatureScoreAward            `json:"awards"`
+	ReturnedMeeples      []PlacedMeeple                 `json:"returnedMeeples,omitempty"`
+	ContributingCities   []FeatureScoreContributingCity `json:"contributingCities,omitempty"`
+	ScoreMarkers         []FeatureScoreMarker           `json:"scoreMarkers,omitempty"`
+}

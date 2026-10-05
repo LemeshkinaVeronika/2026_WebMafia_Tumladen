@@ -76,6 +76,7 @@ type PublicMatchState struct {
 	Players             []matchDTO.MatchPlayerResponse `json:"players"`
 	CreatedAt           string                         `json:"createdAt"`
 	UpdatedAt           string                         `json:"updatedAt"`
+	Events              []gameService.GameEvent        `json:"events,omitempty"`
 }
 
 type PrivateMatchState struct {
@@ -1193,6 +1194,7 @@ func (h *MessageHandler) publicMatchStatePayload(ctx context.Context, matchState
 		Players:             matchState.Players,
 		CreatedAt:           matchState.CreatedAt,
 		UpdatedAt:           matchState.UpdatedAt,
+		Events:              matchState.Events,
 	}
 }
 

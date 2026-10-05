@@ -105,11 +105,13 @@ func (s *Service) ApplyAction(ctx context.Context, req dto.ApplyMatchActionReque
 	if err != nil {
 		return nil, err
 	}
+	events := append([]gameService.GameEvent(nil), actionResult.Events...)
 	if finished {
-		return s.GetLastByRoomID(ctx, req.RoomID)
+		response, err := s.GetLastByRoomID(ctx, req.RoomID)
+		return attachMatchEvents(response, events), err
 	}
 
-	return s.applyAutomaticBotTurns(ctx, req.RoomID, match, players)
+	return s.applyAutomaticBotTurns(ctx, req.RoomID, match, players, events)
 }
 
 func (s *Service) ApplyTurnTimeout(ctx context.Context, req dto.ApplyTurnTimeoutRequest) (*dto.MatchResponse, error) {
@@ -144,11 +146,13 @@ func (s *Service) ApplyTurnTimeout(ctx context.Context, req dto.ApplyTurnTimeout
 	if err != nil {
 		return nil, err
 	}
+	events := append([]gameService.GameEvent(nil), actionResult.Events...)
 	if finished {
-		return s.GetLastByRoomID(ctx, req.RoomID)
+		response, err := s.GetLastByRoomID(ctx, req.RoomID)
+		return attachMatchEvents(response, events), err
 	}
 
-	return s.applyAutomaticBotTurns(ctx, req.RoomID, match, players)
+	return s.applyAutomaticBotTurns(ctx, req.RoomID, match, players, events)
 }
 
 func (s *Service) persistActionResult(
@@ -197,16 +201,19 @@ func (s *Service) applyAutomaticBotTurns(
 	roomID string,
 	match *model.Match,
 	players []model.MatchPlayer,
+	events []gameService.GameEvent,
 ) (*dto.MatchResponse, error) {
 	for step := 0; step < maxBotTurnSteps; step++ {
 		actorID, ok := currentTurnActorID(match)
 		if !ok {
-			return s.GetActiveByRoomID(ctx, roomID)
+			response, err := s.GetActiveByRoomID(ctx, roomID)
+			return attachMatchEvents(response, events), err
 		}
 
 		player, ok := currentTurnBotPlayer(players, actorID)
 		if !ok {
-			return s.GetActiveByRoomID(ctx, roomID)
+			response, err := s.GetActiveByRoomID(ctx, roomID)
+			return attachMatchEvents(response, events), err
 		}
 
 		req, err := s.games.BuildBotAction(match, player)
@@ -218,17 +225,27 @@ func (s *Service) applyAutomaticBotTurns(
 		if err != nil {
 			return nil, mapGameMatchError(err)
 		}
+		events = append(events, actionResult.Events...)
 
 		finished, err := s.persistActionResult(ctx, roomID, actorID, match, actionResult)
 		if err != nil {
 			return nil, err
 		}
 		if finished {
-			return s.GetLastByRoomID(ctx, roomID)
+			response, err := s.GetLastByRoomID(ctx, roomID)
+			return attachMatchEvents(response, events), err
 		}
 	}
 
 	return nil, ErrInvalidMatchAction
+}
+
+func attachMatchEvents(response *dto.MatchResponse, events []gameService.GameEvent) *dto.MatchResponse {
+	if response == nil || len(events) == 0 {
+		return response
+	}
+	response.Events = append([]gameService.GameEvent(nil), events...)
+	return response
 }
 
 func currentTurnActorID(match *model.Match) (string, bool) {

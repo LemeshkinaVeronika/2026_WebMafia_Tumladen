@@ -278,28 +278,53 @@ func compareZoneRefs(a, b placedZoneRef) int {
 	return 0
 }
 
-func (e *Engine) fieldCompletedCityCount(state carcassonneDTO.GameState, graph *fieldGraph, root placedFieldSegmentRef) (int, error) {
+type fieldCompletedCity struct {
+	canonical placedZoneRef
+	feature   *feature
+}
+
+func (e *Engine) fieldCompletedCities(
+	state carcassonneDTO.GameState,
+	graph *fieldGraph,
+	root placedFieldSegmentRef,
+) ([]fieldCompletedCity, error) {
 	if graph == nil {
-		return 0, nil
+		return nil, nil
 	}
 
-	seen := make(map[placedZoneRef]struct{})
+	seen := make(map[placedZoneRef]*feature)
 	for _, fieldRef := range graph.segmentsByRoot[root] {
 		fieldSegment := graph.fieldSegmentByRef[fieldRef]
 		cityRefs := e.adjacentCityZoneRefs(state, fieldSegment)
 		for _, cityRef := range cityRefs {
 			feature, err := e.buildFeature(state, cityRef)
 			if err != nil {
-				return 0, err
+				return nil, err
 			}
 			canonical := canonicalFeatureRef(feature)
 			if _, ok := graph.completedCityFeatures[canonical]; ok {
-				seen[canonical] = struct{}{}
+				seen[canonical] = feature
 			}
 		}
 	}
 
-	return len(seen), nil
+	result := make([]fieldCompletedCity, 0, len(seen))
+	for canonical, feature := range seen {
+		result = append(result, fieldCompletedCity{canonical: canonical, feature: feature})
+	}
+	slices.SortFunc(result, func(a, b fieldCompletedCity) int {
+		return compareZoneRefsOnBoard(state.Board, a.canonical, b.canonical)
+	})
+
+	return result, nil
+}
+
+func (e *Engine) fieldCompletedCityCount(state carcassonneDTO.GameState, graph *fieldGraph, root placedFieldSegmentRef) (int, error) {
+	completedCities, err := e.fieldCompletedCities(state, graph, root)
+	if err != nil {
+		return 0, err
+	}
+	return len(completedCities), nil
 }
 
 func (e *Engine) adjacentCityZoneRefs(state carcassonneDTO.GameState, fieldSegment fieldSegment) []placedZoneRef {

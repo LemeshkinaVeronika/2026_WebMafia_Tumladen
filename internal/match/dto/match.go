@@ -2,6 +2,8 @@ package dto
 
 import "encoding/json"
 
+import gameService "github.com/webmafia/tumladan/internal/game/service"
+
 type MatchPlayerResponse struct {
 	ActorID        string `json:"actorId"`
 	ActorType      string `json:"actorType"`
@@ -13,19 +15,20 @@ type MatchPlayerResponse struct {
 }
 
 type MatchResponse struct {
-	ID                  string                `json:"id"`
-	RoomID              string                `json:"roomId"`
-	GameType            string                `json:"gameType"`
-	Status              string                `json:"status"`
-	GameState           json.RawMessage       `json:"gameState"`
-	IsYourTurn          *bool                 `json:"isYourTurn,omitempty"`
-	Result              json.RawMessage       `json:"result,omitempty"`
-	TerminationReason   *string               `json:"terminationReason,omitempty"`
-	TerminatedByActorID *string               `json:"terminatedByActorId,omitempty"`
-	TerminatedAt        *string               `json:"terminatedAt,omitempty"`
-	Players             []MatchPlayerResponse `json:"players"`
-	CreatedAt           string                `json:"createdAt"`
-	UpdatedAt           string                `json:"updatedAt"`
+	ID                  string                  `json:"id"`
+	RoomID              string                  `json:"roomId"`
+	GameType            string                  `json:"gameType"`
+	Status              string                  `json:"status"`
+	GameState           json.RawMessage         `json:"gameState"`
+	IsYourTurn          *bool                   `json:"isYourTurn,omitempty"`
+	Result              json.RawMessage         `json:"result,omitempty"`
+	TerminationReason   *string                 `json:"terminationReason,omitempty"`
+	TerminatedByActorID *string                 `json:"terminatedByActorId,omitempty"`
+	TerminatedAt        *string                 `json:"terminatedAt,omitempty"`
+	Players             []MatchPlayerResponse   `json:"players"`
+	CreatedAt           string                  `json:"createdAt"`
+	UpdatedAt           string                  `json:"updatedAt"`
+	Events              []gameService.GameEvent `json:"events,omitempty"`
 }
 
 type ApplyMatchActionRequest struct {

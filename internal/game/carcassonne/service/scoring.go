@@ -5,6 +5,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/google/uuid"
 	carcassonneDTO "github.com/webmafia/tumladan/internal/game/carcassonne/dto"
 	gameService "github.com/webmafia/tumladan/internal/game/service"
 	"github.com/webmafia/tumladan/internal/model"
@@ -12,23 +13,36 @@ import (
 
 func (e *Engine) resolveTurn(state *carcassonneDTO.GameState) (gameService.ApplyActionResult, error) {
 	state.Phase = carcassonneDTO.PhaseResolveTurn
+	events := make([]gameService.GameEvent, 0)
 
-	if err := e.scoreCompletedRoads(state); err != nil {
+	if err := e.scoreCompletedRoadsWithEvents(state, &events); err != nil {
 		return gameService.ApplyActionResult{}, err
 	}
 
-	if err := e.scoreCompletedCities(state); err != nil {
+	if err := e.scoreCompletedCitiesWithEvents(state, &events); err != nil {
 		return gameService.ApplyActionResult{}, err
 	}
 
-	if err := e.scoreCompletedMonasteries(state); err != nil {
+	if err := e.scoreCompletedMonasteriesWithEvents(state, &events); err != nil {
 		return gameService.ApplyActionResult{}, err
 	}
 
-	return e.completeTurnAndDrawNextTile(state)
+	result, err := e.completeTurnAndDrawNextTileWithEvents(state, &events)
+	if err != nil {
+		return gameService.ApplyActionResult{}, err
+	}
+	result.Events = events
+	return result, nil
 }
 
 func (e *Engine) scoreCompletedRoads(state *carcassonneDTO.GameState) error {
+	return e.scoreCompletedRoadsWithEvents(state, nil)
+}
+
+func (e *Engine) scoreCompletedRoadsWithEvents(
+	state *carcassonneDTO.GameState,
+	events *[]gameService.GameEvent,
+) error {
 	startZones := e.lastPlacedZoneRefsByType(*state, carcassonneDTO.ZoneTypeRoad)
 	if len(startZones) == 0 {
 		return nil
@@ -64,6 +78,25 @@ func (e *Engine) scoreCompletedRoads(state *carcassonneDTO.GameState) error {
 			continue
 		}
 
+		if events != nil {
+			contributions := e.completedRoadContributions(*state, feature)
+			if scoreContributionTotal(contributions) != score {
+				return gameService.ErrInvalidMatchAction
+			}
+			event, err := e.newFeatureScoredEvent(
+				*state,
+				carcassonneDTO.ZoneTypeRoad,
+				winners,
+				score,
+				contributions,
+				e.meeplesForFeature(*state, feature),
+			)
+			if err != nil {
+				return err
+			}
+			*events = append(*events, event)
+		}
+
 		e.applyScore(state, winners, score)
 		e.returnMeeplesForFeature(state, feature)
 	}
@@ -72,6 +105,13 @@ func (e *Engine) scoreCompletedRoads(state *carcassonneDTO.GameState) error {
 }
 
 func (e *Engine) scoreCompletedMonasteries(state *carcassonneDTO.GameState) error {
+	return e.scoreCompletedMonasteriesWithEvents(state, nil)
+}
+
+func (e *Engine) scoreCompletedMonasteriesWithEvents(
+	state *carcassonneDTO.GameState,
+	events *[]gameService.GameEvent,
+) error {
 	completed := make([]carcassonneDTO.PlacedMeeple, 0)
 
 	for _, meeple := range state.Meeples {
@@ -98,6 +138,28 @@ func (e *Engine) scoreCompletedMonasteries(state *carcassonneDTO.GameState) erro
 	}
 
 	for _, meeple := range completed {
+		if events != nil {
+			contributions := []carcassonneDTO.FeatureScoreContribution{
+				{
+					TileInstanceID: meeple.TileInstanceID,
+					ZoneID:         meeple.ZoneID,
+					Points:         9,
+				},
+			}
+			event, err := e.newFeatureScoredEvent(
+				*state,
+				carcassonneDTO.ZoneTypeMonastery,
+				[]string{meeple.ActorID},
+				9,
+				contributions,
+				[]carcassonneDTO.PlacedMeeple{meeple},
+			)
+			if err != nil {
+				return err
+			}
+			*events = append(*events, event)
+		}
+
 		e.applyScore(state, []string{meeple.ActorID}, 9)
 		e.returnMeeple(state, meeple.TileInstanceID, meeple.ZoneID, meeple.ActorID)
 	}
@@ -106,13 +168,20 @@ func (e *Engine) scoreCompletedMonasteries(state *carcassonneDTO.GameState) erro
 }
 
 func (e *Engine) completeTurnAndDrawNextTile(state *carcassonneDTO.GameState) (gameService.ApplyActionResult, error) {
+	return e.completeTurnAndDrawNextTileWithEvents(state, nil)
+}
+
+func (e *Engine) completeTurnAndDrawNextTileWithEvents(
+	state *carcassonneDTO.GameState,
+	events *[]gameService.GameEvent,
+) (gameService.ApplyActionResult, error) {
 	nextTile, deckRemaining := e.drawNextPlaceableTile(state.DeckRemaining, state.Board)
 	state.DeckRemaining = deckRemaining
 	state.CurrentTile = nextTile
 	state.LastPlacedTile = nil
 
 	if nextTile == nil {
-		if err := e.scoreFinalFeatures(state); err != nil {
+		if err := e.scoreFinalFeaturesWithEvents(state, events); err != nil {
 			return gameService.ApplyActionResult{}, err
 		}
 
@@ -223,8 +292,87 @@ func (e *Engine) hasAnyTilePlacement(tile carcassonneDTO.TileInstance, board []c
 	return false
 }
 
+type finalOccupiedFeature struct {
+	featureType carcassonneDTO.ZoneType
+	canonical   placedZoneRef
+	feature     *feature
+}
+
 func (e *Engine) scoreFinalFeatures(state *carcassonneDTO.GameState) error {
-	scoredFeatures := make(map[placedZoneRef]struct{})
+	return e.scoreFinalFeaturesWithEvents(state, nil)
+}
+
+func (e *Engine) scoreFinalFeaturesWithEvents(
+	state *carcassonneDTO.GameState,
+	events *[]gameService.GameEvent,
+) error {
+	features, err := e.finalOccupiedRoadsAndCities(*state)
+	if err != nil {
+		return err
+	}
+
+	for _, featureType := range []carcassonneDTO.ZoneType{
+		carcassonneDTO.ZoneTypeRoad,
+		carcassonneDTO.ZoneTypeCity,
+	} {
+		for _, candidate := range features {
+			if candidate.featureType != featureType {
+				continue
+			}
+
+			winners := winningActors(candidate.feature.MeeplesByActor)
+			if len(winners) == 0 {
+				continue
+			}
+
+			score := e.finalFeatureScore(*state, featureType, candidate.feature)
+			if events != nil {
+				contributions := e.finalFeatureContributions(*state, featureType, candidate.feature, score)
+				if scoreContributionTotal(contributions) != score {
+					return gameService.ErrInvalidMatchAction
+				}
+				e.sortScoreContributions(*state, contributions)
+				returnedMeeples := e.meeplesForFeature(*state, candidate.feature)
+				e.sortMeeples(*state, returnedMeeples)
+
+				event, eventErr := e.newFeatureScoredEventWithDetails(
+					*state,
+					featureType,
+					winners,
+					score,
+					contributions,
+					returnedMeeples,
+					featureScoredEventDetails{scoringPhase: carcassonneDTO.ScoringPhaseFinal},
+				)
+				if eventErr != nil {
+					return eventErr
+				}
+				*events = append(*events, event)
+			}
+
+			if score > 0 {
+				e.applyScore(state, winners, score)
+			}
+		}
+	}
+
+	if err := e.scoreFinalMonasteriesWithEvents(state, events); err != nil {
+		return err
+	}
+
+	if err := e.scoreFinalFieldsWithEvents(state, events); err != nil {
+		return err
+	}
+
+	e.returnAllMeeples(state)
+	return nil
+}
+
+func (e *Engine) finalOccupiedRoadsAndCities(
+	state carcassonneDTO.GameState,
+) ([]finalOccupiedFeature, error) {
+	seen := make(map[placedZoneRef]struct{})
+	result := make([]finalOccupiedFeature, 0)
 
 	for _, meeple := range state.Meeples {
 		tile := placedTileByInstanceID(state.Board, meeple.TileInstanceID)
@@ -238,48 +386,112 @@ func (e *Engine) scoreFinalFeatures(state *carcassonneDTO.GameState) error {
 		}
 
 		zone, ok := findZone(def, meeple.ZoneID)
-		if !ok {
+		if !ok || (zone.Type != carcassonneDTO.ZoneTypeRoad && zone.Type != carcassonneDTO.ZoneTypeCity) {
 			continue
 		}
 
-		switch zone.Type {
-		case carcassonneDTO.ZoneTypeRoad, carcassonneDTO.ZoneTypeCity:
-			start := placedZoneRef{
-				TileInstanceID: meeple.TileInstanceID,
-				ZoneID:         meeple.ZoneID,
-			}
-			feature, err := e.buildFeature(*state, start)
-			if err != nil {
-				return err
-			}
+		feature, err := e.buildFeature(state, placedZoneRef{
+			TileInstanceID: meeple.TileInstanceID,
+			ZoneID:         meeple.ZoneID,
+		})
+		if err != nil {
+			return nil, err
+		}
 
-			canonical := canonicalFeatureRef(feature)
-			if _, ok := scoredFeatures[canonical]; ok {
-				continue
-			}
-			scoredFeatures[canonical] = struct{}{}
+		identity := canonicalFeatureRef(feature)
+		if _, ok := seen[identity]; ok {
+			continue
+		}
+		seen[identity] = struct{}{}
+		result = append(result, finalOccupiedFeature{
+			featureType: zone.Type,
+			canonical:   canonicalFeatureRefOnBoard(state, feature),
+			feature:     feature,
+		})
+	}
 
-			winners := winningActors(feature.MeeplesByActor)
-			if len(winners) == 0 {
-				continue
+	slices.SortFunc(result, func(a, b finalOccupiedFeature) int {
+		if a.featureType != b.featureType {
+			if a.featureType == carcassonneDTO.ZoneTypeRoad {
+				return -1
 			}
+			return 1
+		}
+		return compareZoneRefsOnBoard(state.Board, a.canonical, b.canonical)
+	})
 
-			score := e.finalFeatureScore(*state, zone.Type, feature)
-			if score > 0 {
-				e.applyScore(state, winners, score)
-			}
+	return result, nil
+}
 
-		case carcassonneDTO.ZoneTypeMonastery:
-			score := 1 + adjacentTileCount(state.Board, tile.X, tile.Y)
-			e.applyScore(state, []string{meeple.ActorID}, score)
+func (e *Engine) finalFeatureContributions(
+	state carcassonneDTO.GameState,
+	featureType carcassonneDTO.ZoneType,
+	feature *feature,
+	score int,
+) []carcassonneDTO.FeatureScoreContribution {
+	pointsPerTile := 1
+	if score == 0 {
+		pointsPerTile = 0
+	}
+
+	return e.featureScoreContributions(
+		state,
+		feature,
+		pointsPerTile,
+		featureType == carcassonneDTO.ZoneTypeCity,
+	)
+}
+
+func (e *Engine) scoreFinalMonasteriesWithEvents(
+	state *carcassonneDTO.GameState,
+	events *[]gameService.GameEvent,
+) error {
+	monasteries := make([]carcassonneDTO.PlacedMeeple, 0)
+	for _, meeple := range state.Meeples {
+		tile := placedTileByInstanceID(state.Board, meeple.TileInstanceID)
+		if tile == nil {
+			continue
+		}
+		def, ok := e.catalog.Get(tile.TileID)
+		if !ok {
+			continue
+		}
+		zone, ok := findZone(def, meeple.ZoneID)
+		if ok && zone.Type == carcassonneDTO.ZoneTypeMonastery {
+			monasteries = append(monasteries, meeple)
 		}
 	}
 
-	if err := e.scoreFinalFields(state); err != nil {
-		return err
+	e.sortMeeples(*state, monasteries)
+	for _, meeple := range monasteries {
+		tile := placedTileByInstanceID(state.Board, meeple.TileInstanceID)
+		if tile == nil {
+			continue
+		}
+		score := 1 + adjacentTileCount(state.Board, tile.X, tile.Y)
+		if events != nil {
+			contributions := []carcassonneDTO.FeatureScoreContribution{{
+				TileInstanceID: meeple.TileInstanceID,
+				ZoneID:         meeple.ZoneID,
+				Points:         score,
+			}}
+			event, err := e.newFeatureScoredEventWithDetails(
+				*state,
+				carcassonneDTO.ZoneTypeMonastery,
+				[]string{meeple.ActorID},
+				score,
+				contributions,
+				[]carcassonneDTO.PlacedMeeple{meeple},
+				featureScoredEventDetails{scoringPhase: carcassonneDTO.ScoringPhaseFinal},
+			)
+			if err != nil {
+				return err
+			}
+			*events = append(*events, event)
+		}
+		e.applyScore(state, []string{meeple.ActorID}, score)
 	}
 
-	e.returnAllMeeples(state)
 	return nil
 }
 
@@ -307,29 +519,287 @@ func (e *Engine) finalFeatureScore(
 }
 
 func (e *Engine) scoreFinalFields(state *carcassonneDTO.GameState) error {
+	return e.scoreFinalFieldsWithEvents(state, nil)
+}
+
+type finalOccupiedField struct {
+	root      placedFieldSegmentRef
+	canonical placedFieldSegmentRef
+}
+
+func (e *Engine) scoreFinalFieldsWithEvents(
+	state *carcassonneDTO.GameState,
+	events *[]gameService.GameEvent,
+) error {
 	graph, err := e.buildFieldGraph(*state)
 	if err != nil {
 		return err
 	}
 
-	for root, meeplesByActor := range graph.meeplesByRoot {
+	fields := make([]finalOccupiedField, 0, len(graph.meeplesByRoot))
+	for root := range graph.meeplesByRoot {
+		fields = append(fields, finalOccupiedField{
+			root:      root,
+			canonical: canonicalFieldSegmentRef(*state, graph, root),
+		})
+	}
+	slices.SortFunc(fields, func(a, b finalOccupiedField) int {
+		return compareFieldSegmentRefsOnBoard(state.Board, a.canonical, b.canonical)
+	})
+
+	for _, field := range fields {
+		meeplesByActor := graph.meeplesByRoot[field.root]
 		winners := winningActors(meeplesByActor)
 		if len(winners) == 0 {
 			continue
 		}
 
-		completedCities, err := e.fieldCompletedCityCount(*state, graph, root)
+		completedCities, err := e.fieldCompletedCities(*state, graph, field.root)
 		if err != nil {
 			return err
 		}
-		if completedCities == 0 {
-			continue
+		score := len(completedCities) * 3
+		returnedMeeples := e.meeplesForField(*state, graph, field.root)
+
+		if events != nil {
+			contributingCities := e.finalFieldContributingCities(*state, completedCities)
+			scoreMarkers := e.finalFieldScoreMarkers(returnedMeeples, winners, score)
+			event, eventErr := e.newFeatureScoredEventWithDetails(
+				*state,
+				carcassonneDTO.ZoneTypeField,
+				winners,
+				score,
+				[]carcassonneDTO.FeatureScoreContribution{},
+				returnedMeeples,
+				featureScoredEventDetails{
+					scoringPhase:       carcassonneDTO.ScoringPhaseFinal,
+					contributingCities: contributingCities,
+					scoreMarkers:       scoreMarkers,
+				},
+			)
+			if eventErr != nil {
+				return eventErr
+			}
+			*events = append(*events, event)
 		}
 
-		e.applyScore(state, winners, completedCities*3)
+		if score > 0 {
+			e.applyScore(state, winners, score)
+		}
 	}
 
 	return nil
+}
+
+func canonicalFeatureRefOnBoard(state carcassonneDTO.GameState, scoredFeature *feature) placedZoneRef {
+	if scoredFeature == nil || len(scoredFeature.Zones) == 0 {
+		return placedZoneRef{}
+	}
+
+	zones := slices.Clone(scoredFeature.Zones)
+	slices.SortFunc(zones, func(a, b placedZoneRef) int {
+		return compareZoneRefsOnBoard(state.Board, a, b)
+	})
+	return zones[0]
+}
+
+func canonicalFieldSegmentRef(
+	state carcassonneDTO.GameState,
+	graph *fieldGraph,
+	root placedFieldSegmentRef,
+) placedFieldSegmentRef {
+	if graph == nil || len(graph.segmentsByRoot[root]) == 0 {
+		return placedFieldSegmentRef{}
+	}
+
+	segments := slices.Clone(graph.segmentsByRoot[root])
+	slices.SortFunc(segments, func(a, b placedFieldSegmentRef) int {
+		return compareFieldSegmentRefsOnBoard(state.Board, a, b)
+	})
+	return segments[0]
+}
+
+func compareZoneRefsOnBoard(board []carcassonneDTO.PlacedTile, a, b placedZoneRef) int {
+	if result := compareTileInstanceIDsOnBoard(board, a.TileInstanceID, b.TileInstanceID); result != 0 {
+		return result
+	}
+	if a.ZoneID < b.ZoneID {
+		return -1
+	}
+	if a.ZoneID > b.ZoneID {
+		return 1
+	}
+	return 0
+}
+
+func compareFieldSegmentRefsOnBoard(
+	board []carcassonneDTO.PlacedTile,
+	a, b placedFieldSegmentRef,
+) int {
+	if result := compareTileInstanceIDsOnBoard(board, a.TileInstanceID, b.TileInstanceID); result != 0 {
+		return result
+	}
+	if a.ZoneID < b.ZoneID {
+		return -1
+	}
+	if a.ZoneID > b.ZoneID {
+		return 1
+	}
+	if a.Segment < b.Segment {
+		return -1
+	}
+	if a.Segment > b.Segment {
+		return 1
+	}
+	return 0
+}
+
+func compareTileInstanceIDsOnBoard(board []carcassonneDTO.PlacedTile, a, b string) int {
+	if a == b {
+		return 0
+	}
+
+	tileA := placedTileByInstanceID(board, a)
+	tileB := placedTileByInstanceID(board, b)
+	if tileA != nil && tileB != nil {
+		if tileA.Y < tileB.Y {
+			return -1
+		}
+		if tileA.Y > tileB.Y {
+			return 1
+		}
+		if tileA.X < tileB.X {
+			return -1
+		}
+		if tileA.X > tileB.X {
+			return 1
+		}
+	} else if tileA != nil {
+		return -1
+	} else if tileB != nil {
+		return 1
+	}
+
+	if a < b {
+		return -1
+	}
+	return 1
+}
+
+func (e *Engine) sortScoreContributions(
+	state carcassonneDTO.GameState,
+	contributions []carcassonneDTO.FeatureScoreContribution,
+) {
+	slices.SortFunc(contributions, func(a, b carcassonneDTO.FeatureScoreContribution) int {
+		return compareZoneRefsOnBoard(state.Board, placedZoneRef{
+			TileInstanceID: a.TileInstanceID,
+			ZoneID:         a.ZoneID,
+		}, placedZoneRef{
+			TileInstanceID: b.TileInstanceID,
+			ZoneID:         b.ZoneID,
+		})
+	})
+}
+
+func (e *Engine) sortMeeples(state carcassonneDTO.GameState, meeples []carcassonneDTO.PlacedMeeple) {
+	slices.SortFunc(meeples, func(a, b carcassonneDTO.PlacedMeeple) int {
+		if result := compareZoneRefsOnBoard(state.Board, placedZoneRef{
+			TileInstanceID: a.TileInstanceID,
+			ZoneID:         a.ZoneID,
+		}, placedZoneRef{
+			TileInstanceID: b.TileInstanceID,
+			ZoneID:         b.ZoneID,
+		}); result != 0 {
+			return result
+		}
+		if a.ActorID < b.ActorID {
+			return -1
+		}
+		if a.ActorID > b.ActorID {
+			return 1
+		}
+		if a.MeepleType < b.MeepleType {
+			return -1
+		}
+		if a.MeepleType > b.MeepleType {
+			return 1
+		}
+		if a.Segment < b.Segment {
+			return -1
+		}
+		if a.Segment > b.Segment {
+			return 1
+		}
+		return 0
+	})
+}
+
+func (e *Engine) meeplesForField(
+	state carcassonneDTO.GameState,
+	graph *fieldGraph,
+	root placedFieldSegmentRef,
+) []carcassonneDTO.PlacedMeeple {
+	meeples := make([]carcassonneDTO.PlacedMeeple, 0)
+	for _, meeple := range state.Meeples {
+		zoneRef := placedZoneRef{TileInstanceID: meeple.TileInstanceID, ZoneID: meeple.ZoneID}
+		if slices.Contains(graph.rootsForZone(zoneRef), root) {
+			meeples = append(meeples, meeple)
+		}
+	}
+	e.sortMeeples(state, meeples)
+	return meeples
+}
+
+func (e *Engine) finalFieldContributingCities(
+	state carcassonneDTO.GameState,
+	completedCities []fieldCompletedCity,
+) []carcassonneDTO.FeatureScoreContributingCity {
+	result := make([]carcassonneDTO.FeatureScoreContributingCity, 0, len(completedCities))
+	for _, completedCity := range completedCities {
+		anchor := canonicalFeatureRefOnBoard(state, completedCity.feature)
+		tileInstanceIDs := uniqueTileInstanceIDs(completedCity.feature)
+		slices.SortFunc(tileInstanceIDs, func(a, b string) int {
+			return compareTileInstanceIDsOnBoard(state.Board, a, b)
+		})
+		result = append(result, carcassonneDTO.FeatureScoreContributingCity{
+			AnchorTileInstanceID: anchor.TileInstanceID,
+			AnchorZoneID:         anchor.ZoneID,
+			TileInstanceIDs:      tileInstanceIDs,
+		})
+	}
+	slices.SortFunc(result, func(a, b carcassonneDTO.FeatureScoreContributingCity) int {
+		return compareZoneRefsOnBoard(state.Board, placedZoneRef{
+			TileInstanceID: a.AnchorTileInstanceID,
+			ZoneID:         a.AnchorZoneID,
+		}, placedZoneRef{
+			TileInstanceID: b.AnchorTileInstanceID,
+			ZoneID:         b.AnchorZoneID,
+		})
+	})
+	return result
+}
+
+func (e *Engine) finalFieldScoreMarkers(
+	returnedMeeples []carcassonneDTO.PlacedMeeple,
+	winners []string,
+	score int,
+) []carcassonneDTO.FeatureScoreMarker {
+	markers := make([]carcassonneDTO.FeatureScoreMarker, 0, len(winners))
+	for _, actorID := range winners {
+		for _, meeple := range returnedMeeples {
+			if meeple.ActorID != actorID {
+				continue
+			}
+			markers = append(markers, carcassonneDTO.FeatureScoreMarker{
+				ActorID:        actorID,
+				TileInstanceID: meeple.TileInstanceID,
+				ZoneID:         meeple.ZoneID,
+				Points:         score,
+			})
+			break
+		}
+	}
+	return markers
 }
 
 func (e *Engine) applyScore(state *carcassonneDTO.GameState, actorIDs []string, score int) {
@@ -371,6 +841,25 @@ func (e *Engine) returnMeeplesForFeature(state *carcassonneDTO.GameState, featur
 	state.Meeples = remaining
 }
 
+func (e *Engine) meeplesForFeature(
+	state carcassonneDTO.GameState,
+	feature *feature,
+) []carcassonneDTO.PlacedMeeple {
+	if feature == nil {
+		return nil
+	}
+
+	meeples := make([]carcassonneDTO.PlacedMeeple, 0)
+	for _, meeple := range state.Meeples {
+		if slices.ContainsFunc(feature.Zones, func(ref placedZoneRef) bool {
+			return ref.TileInstanceID == meeple.TileInstanceID && ref.ZoneID == meeple.ZoneID
+		}) {
+			meeples = append(meeples, meeple)
+		}
+	}
+	return meeples
+}
+
 func (e *Engine) returnMeeple(state *carcassonneDTO.GameState, tileInstanceID, zoneID, actorID string) {
 	remaining := state.Meeples[:0]
 
@@ -408,6 +897,7 @@ func winningActors(meeplesByActor map[string]int) []string {
 			winners = append(winners, actorID)
 		}
 	}
+	slices.Sort(winners)
 
 	return winners
 }
@@ -549,6 +1039,155 @@ func (e *Engine) completedRoadScore(state carcassonneDTO.GameState, feature *fea
 	return tileCount
 }
 
+func (e *Engine) completedRoadContributions(
+	state carcassonneDTO.GameState,
+	feature *feature,
+) []carcassonneDTO.FeatureScoreContribution {
+	pointsPerTile := 1
+	if e.featureHasInn(state, feature) {
+		pointsPerTile = 2
+	}
+	return e.featureScoreContributions(state, feature, pointsPerTile, false)
+}
+
+func (e *Engine) completedCityContributions(
+	state carcassonneDTO.GameState,
+	feature *feature,
+) []carcassonneDTO.FeatureScoreContribution {
+	pointsPerTile := 2
+	if e.featureHasCathedral(state, feature) {
+		pointsPerTile = 3
+	}
+	return e.featureScoreContributions(state, feature, pointsPerTile, true)
+}
+
+func (e *Engine) featureScoreContributions(
+	state carcassonneDTO.GameState,
+	feature *feature,
+	pointsPerTile int,
+	includePennants bool,
+) []carcassonneDTO.FeatureScoreContribution {
+	if feature == nil {
+		return nil
+	}
+
+	contributions := make([]carcassonneDTO.FeatureScoreContribution, 0, len(feature.Zones))
+	indexByTile := make(map[string]int, len(feature.Zones))
+	seenZones := make(map[placedZoneRef]struct{}, len(feature.Zones))
+
+	for _, ref := range feature.Zones {
+		if _, ok := seenZones[ref]; ok {
+			continue
+		}
+		seenZones[ref] = struct{}{}
+
+		index, ok := indexByTile[ref.TileInstanceID]
+		if !ok {
+			index = len(contributions)
+			indexByTile[ref.TileInstanceID] = index
+			contributions = append(contributions, carcassonneDTO.FeatureScoreContribution{
+				TileInstanceID: ref.TileInstanceID,
+				ZoneID:         ref.ZoneID,
+				Points:         pointsPerTile,
+			})
+		}
+
+		if !includePennants {
+			continue
+		}
+		placedZone, err := e.getPlacedZone(state, ref)
+		if err == nil && placedZone.Zone.Type == carcassonneDTO.ZoneTypeCity && placedZone.Zone.HasPennant {
+			contributions[index].Points += pointsPerTile
+		}
+	}
+
+	return contributions
+}
+
+func scoreContributionTotal(contributions []carcassonneDTO.FeatureScoreContribution) int {
+	total := 0
+	for _, contribution := range contributions {
+		total += contribution.Points
+	}
+	return total
+}
+
+func (e *Engine) newFeatureScoredEvent(
+	state carcassonneDTO.GameState,
+	featureType carcassonneDTO.ZoneType,
+	winners []string,
+	totalPoints int,
+	contributions []carcassonneDTO.FeatureScoreContribution,
+	returnedMeeples []carcassonneDTO.PlacedMeeple,
+) (gameService.GameEvent, error) {
+	return e.newFeatureScoredEventWithDetails(
+		state,
+		featureType,
+		winners,
+		totalPoints,
+		contributions,
+		returnedMeeples,
+		featureScoredEventDetails{scoringPhase: carcassonneDTO.ScoringPhaseTurn},
+	)
+}
+
+type featureScoredEventDetails struct {
+	scoringPhase       carcassonneDTO.ScoringPhase
+	contributingCities []carcassonneDTO.FeatureScoreContributingCity
+	scoreMarkers       []carcassonneDTO.FeatureScoreMarker
+}
+
+func (e *Engine) newFeatureScoredEventWithDetails(
+	state carcassonneDTO.GameState,
+	featureType carcassonneDTO.ZoneType,
+	winners []string,
+	totalPoints int,
+	contributions []carcassonneDTO.FeatureScoreContribution,
+	returnedMeeples []carcassonneDTO.PlacedMeeple,
+	details featureScoredEventDetails,
+) (gameService.GameEvent, error) {
+	anchorTileInstanceID := ""
+	if len(details.scoreMarkers) > 0 {
+		anchorTileInstanceID = details.scoreMarkers[0].TileInstanceID
+	} else if featureType == carcassonneDTO.ZoneTypeMonastery && len(contributions) > 0 {
+		anchorTileInstanceID = contributions[0].TileInstanceID
+	} else if details.scoringPhase != carcassonneDTO.ScoringPhaseFinal && state.LastPlacedTile != nil {
+		anchorTileInstanceID = state.LastPlacedTile.InstanceID
+	} else if len(contributions) > 0 {
+		anchorTileInstanceID = contributions[0].TileInstanceID
+	}
+
+	awards := make([]carcassonneDTO.FeatureScoreAward, 0, len(winners))
+	for _, actorID := range winners {
+		awards = append(awards, carcassonneDTO.FeatureScoreAward{
+			ActorID: actorID,
+			Points:  totalPoints,
+		})
+	}
+
+	payload, err := json.Marshal(carcassonneDTO.FeatureScoredEventPayload{
+		TurnNumber:           state.TurnNumber,
+		FeatureType:          featureType,
+		ScoringPhase:         details.scoringPhase,
+		AnchorTileInstanceID: anchorTileInstanceID,
+		Contributions:        contributions,
+		TotalPoints:          totalPoints,
+		Awards:               awards,
+		ReturnedMeeples:      returnedMeeples,
+		ContributingCities:   details.contributingCities,
+		ScoreMarkers:         details.scoreMarkers,
+	})
+	if err != nil {
+		return gameService.GameEvent{}, err
+	}
+
+	return gameService.GameEvent{
+		ID:      uuid.NewString(),
+		Type:    carcassonneDTO.EventTypeFeatureScored,
+		Payload: payload,
+	}, nil
+}
+
 func (e *Engine) completedCityScore(
 	state carcassonneDTO.GameState,
 	feature *feature,
@@ -607,6 +1246,13 @@ func (e *Engine) featureHasCathedral(state carcassonneDTO.GameState, feature *fe
 }
 
 func (e *Engine) scoreCompletedCities(state *carcassonneDTO.GameState) error {
+	return e.scoreCompletedCitiesWithEvents(state, nil)
+}
+
+func (e *Engine) scoreCompletedCitiesWithEvents(
+	state *carcassonneDTO.GameState,
+	events *[]gameService.GameEvent,
+) error {
 	startZones := e.lastPlacedZoneRefsByType(*state, carcassonneDTO.ZoneTypeCity)
 	if len(startZones) == 0 {
 		return nil
@@ -642,6 +1288,25 @@ func (e *Engine) scoreCompletedCities(state *carcassonneDTO.GameState) error {
 		score := e.completedCityScore(*state, feature, tileCount, pennantCount)
 		if score <= 0 {
 			continue
+		}
+
+		if events != nil {
+			contributions := e.completedCityContributions(*state, feature)
+			if scoreContributionTotal(contributions) != score {
+				return gameService.ErrInvalidMatchAction
+			}
+			event, err := e.newFeatureScoredEvent(
+				*state,
+				carcassonneDTO.ZoneTypeCity,
+				winners,
+				score,
+				contributions,
+				e.meeplesForFeature(*state, feature),
+			)
+			if err != nil {
+				return err
+			}
+			*events = append(*events, event)
 		}
 
 		e.applyScore(state, winners, score)
