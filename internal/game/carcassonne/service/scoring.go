@@ -761,10 +761,22 @@ func (e *Engine) finalFieldContributingCities(
 		slices.SortFunc(tileInstanceIDs, func(a, b string) int {
 			return compareTileInstanceIDsOnBoard(state.Board, a, b)
 		})
+		zoneRefs := slices.Clone(completedCity.feature.Zones)
+		slices.SortFunc(zoneRefs, func(a, b placedZoneRef) int {
+			return compareZoneRefsOnBoard(state.Board, a, b)
+		})
+		zones := make([]carcassonneDTO.FeatureScoreZoneRef, 0, len(zoneRefs))
+		for _, zoneRef := range zoneRefs {
+			zones = append(zones, carcassonneDTO.FeatureScoreZoneRef{
+				TileInstanceID: zoneRef.TileInstanceID,
+				ZoneID:         zoneRef.ZoneID,
+			})
+		}
 		result = append(result, carcassonneDTO.FeatureScoreContributingCity{
 			AnchorTileInstanceID: anchor.TileInstanceID,
 			AnchorZoneID:         anchor.ZoneID,
 			TileInstanceIDs:      tileInstanceIDs,
+			Zones:                zones,
 		})
 	}
 	slices.SortFunc(result, func(a, b carcassonneDTO.FeatureScoreContributingCity) int {

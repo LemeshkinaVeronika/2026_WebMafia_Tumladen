@@ -489,6 +489,13 @@ func TestFinalFieldEventUsesOneMarkerPerWinningActor(t *testing.T) {
 	if city.TileInstanceIDs[0] != "city-2" || city.TileInstanceIDs[1] != "city-1" {
 		t.Fatalf("contributing city tiles = %#v, want board order", city.TileInstanceIDs)
 	}
+	if got, want := len(city.Zones), 2; got != want {
+		t.Fatalf("contributing city zone count = %d, want %d", got, want)
+	}
+	if city.Zones[0].TileInstanceID != "city-2" || city.Zones[0].ZoneID != "city_1" ||
+		city.Zones[1].TileInstanceID != "city-1" || city.Zones[1].ZoneID != "city_1" {
+		t.Fatalf("contributing city zones = %#v, want deterministic board order", city.Zones)
+	}
 	if got, want := len(payload.Awards), 2; got != want {
 		t.Fatalf("award count = %d, want %d", got, want)
 	}

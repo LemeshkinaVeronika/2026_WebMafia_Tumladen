@@ -150,10 +150,16 @@ type FeatureScoreAward struct {
 	Points  int    `json:"points"`
 }
 
+type FeatureScoreZoneRef struct {
+	TileInstanceID string `json:"tileInstanceId"`
+	ZoneID         string `json:"zoneId"`
+}
+
 type FeatureScoreContributingCity struct {
-	AnchorTileInstanceID string   `json:"anchorTileInstanceId"`
-	AnchorZoneID         string   `json:"anchorZoneId"`
-	TileInstanceIDs      []string `json:"tileInstanceIds"`
+	AnchorTileInstanceID string                `json:"anchorTileInstanceId"`
+	AnchorZoneID         string                `json:"anchorZoneId"`
+	TileInstanceIDs      []string              `json:"tileInstanceIds"`
+	Zones                []FeatureScoreZoneRef `json:"zones,omitempty"`
 }
 
 type FeatureScoreMarker struct {
