@@ -103,6 +103,34 @@ func TestFinalFieldScoringCountsCompletedCityOnce(t *testing.T) {
 	}
 }
 
+func TestFinalFieldScoringCountsFourCitiesAroundCenterField(t *testing.T) {
+	engine := testEngine(t)
+
+	state := carcassonneDTO.GameState{
+		Players: []carcassonneDTO.PlayerState{
+			{ActorID: "actor-a", MeeplesLeft: 6},
+		},
+		Board: []carcassonneDTO.PlacedTile{
+			{InstanceID: "four-cities", TileID: "castle-town-with-extra-tower", X: 0, Y: 0, Rotation: 0},
+			{InstanceID: "top-cap", TileID: "city_cap", X: 0, Y: -1, Rotation: 180},
+			{InstanceID: "right-cap", TileID: "city_cap", X: 1, Y: 0, Rotation: 270},
+			{InstanceID: "bottom-cap", TileID: "city_cap", X: 0, Y: 1, Rotation: 0},
+			{InstanceID: "left-cap", TileID: "city_cap", X: -1, Y: 0, Rotation: 90},
+		},
+		Meeples: []carcassonneDTO.PlacedMeeple{
+			{TileInstanceID: "four-cities", ZoneID: "field_1", ActorID: "actor-a"},
+		},
+	}
+
+	if err := engine.scoreFinalFeatures(&state); err != nil {
+		t.Fatalf("scoreFinalFeatures() error = %v", err)
+	}
+
+	if got, want := state.Players[0].Score, 12; got != want {
+		t.Fatalf("final farmer score = %d, want %d", got, want)
+	}
+}
+
 func TestFinalFieldScoringTiesPlayersOnSameField(t *testing.T) {
 	engine := testEngine(t)
 

@@ -399,6 +399,13 @@ func adjacentSegments(segment carcassonneDTO.ZoneSegment) []carcassonneDTO.ZoneS
 		return []carcassonneDTO.ZoneSegment{carcassonneDTO.SegmentLeftBottom, carcassonneDTO.SegmentLeftTop}
 	case carcassonneDTO.SegmentLeftTop:
 		return []carcassonneDTO.ZoneSegment{carcassonneDTO.SegmentLeftCenter, carcassonneDTO.SegmentTopLeft}
+	case carcassonneDTO.SegmentCenter:
+		return []carcassonneDTO.ZoneSegment{
+			carcassonneDTO.SegmentTopCenter,
+			carcassonneDTO.SegmentRightCenter,
+			carcassonneDTO.SegmentBottomCenter,
+			carcassonneDTO.SegmentLeftCenter,
+		}
 	default:
 		return nil
 	}

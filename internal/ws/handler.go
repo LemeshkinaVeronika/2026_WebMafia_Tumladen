@@ -68,6 +68,7 @@ type PublicMatchState struct {
 	RoomID              string                         `json:"roomId"`
 	GameType            string                         `json:"gameType"`
 	Status              string                         `json:"status"`
+	ServerTime          string                         `json:"serverTime"`
 	GameState           json.RawMessage                `json:"gameState"`
 	Result              json.RawMessage                `json:"result,omitempty"`
 	TerminationReason   *string                        `json:"terminationReason,omitempty"`
@@ -1284,6 +1285,7 @@ func (h *MessageHandler) publicMatchStatePayload(ctx context.Context, matchState
 		RoomID:              matchState.RoomID,
 		GameType:            matchState.GameType,
 		Status:              matchState.Status,
+		ServerTime:          time.Now().UTC().Format(time.RFC3339Nano),
 		GameState:           gameState,
 		Result:              matchState.Result,
 		TerminationReason:   matchState.TerminationReason,
