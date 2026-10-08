@@ -1,6 +1,10 @@
 package dto
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/webmafia/tumladan/internal/model"
+)
 
 type CreateRoomRequest struct {
 	Name      string `json:"name"`
@@ -87,11 +91,13 @@ type GetRoomByInviteCodeResponse struct {
 }
 
 type FinishRoomMatchRequest struct {
-	ActorID   *string         `json:"actorId,omitempty"`
-	RoomID    string          `json:"roomId"`
-	Reason    string          `json:"reason"`
-	GameState json.RawMessage `json:"gameState,omitempty"`
-	Result    json.RawMessage `json:"result,omitempty"`
+	ActorID              *string                   `json:"actorId,omitempty"`
+	RoomID               string                    `json:"roomId"`
+	Reason               string                    `json:"reason"`
+	GameState            json.RawMessage           `json:"gameState,omitempty"`
+	Result               json.RawMessage           `json:"result,omitempty"`
+	ExpectedStateVersion *int                      `json:"-"`
+	ActionReceipt        *model.MatchActionReceipt `json:"-"`
 }
 
 type DeleteRoomRequest struct {

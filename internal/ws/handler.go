@@ -148,8 +148,8 @@ func NewHandler(
 		}
 		messageHandler.broadcastMatchState(ctx, roomID, matchState)
 		if matchState.Status == string(model.MatchStatusFinished) {
-			h.turnTimers.Stop(roomID)
-			messageHandler.broadcastMatchFinished(ctx, roomID)
+			h.turnTimers.stopMatch(roomID, matchState.ID)
+			messageHandler.broadcastKnownMatchFinished(ctx, roomID, matchState)
 			return
 		}
 		h.turnTimers.Schedule(matchState)
@@ -742,6 +742,23 @@ func (h *MessageHandler) sendMatchState(state *ConnectionState, matchState *matc
 	})
 }
 
+func (h *MessageHandler) sendMatchStateWithLifecycle(state *ConnectionState, matchState *matchDTO.MatchResponse) {
+	if state == nil || state.Client == nil || matchState == nil {
+		return
+	}
+
+	h.sendMatchState(state, matchState)
+	if matchState.Status == string(model.MatchStatusFinished) {
+		h.turnTimers.stopMatch(matchState.RoomID, matchState.ID)
+		h.sendServerMessage(state.Client, ServerMessage{
+			Type:    "match_finished",
+			Payload: h.matchFinishedPayload(state.Client.Context(), matchState),
+		})
+		return
+	}
+	h.turnTimers.Schedule(matchState)
+}
+
 func (h *MessageHandler) broadcastMatchState(ctx context.Context, roomID string, matchState *matchDTO.MatchResponse) {
 	h.broadcastMatchEvent(ctx, roomID, "match_state", h.publicMatchStatePayload(ctx, matchState))
 	h.broadcastPrivateMatchState(ctx, roomID, matchState)
@@ -821,46 +838,127 @@ func (h *MessageHandler) handleMatchAction(ctx context.Context, state *Connectio
 	}
 
 	var p MatchActionPayload
-	if err := json.Unmarshal(raw, &p); err != nil || p.RoomID == "" || p.Action == "" {
+	if err := json.Unmarshal(raw, &p); err != nil {
 		h.sendError(client, ErrorInvalidPayload, "invalid match action payload")
 		return
 	}
-
-	matchState, err := h.matchService.ApplyAction(ctx, matchDTO.ApplyMatchActionRequest{
-		ActorID: state.Actor.ID,
-		RoomID:  p.RoomID,
-		Action:  p.Action,
-		Payload: marshalRawMessage(p.Payload),
-	})
-	if err != nil {
-		code := ErrorInternal
-		message := "failed to apply match action"
-		switch {
-		case errors.Is(err, matchService.ErrMatchNotFound):
-			code = ErrorMatchNotFound
-			message = "match not found"
-		case errors.Is(err, matchService.ErrMatchNotActive):
-			code = ErrorMatchNotActive
-			message = "match is not active"
-		case errors.Is(err, matchService.ErrInvalidMatchAction):
-			code = ErrorInvalidMatchAction
-			message = "invalid match action"
-		case errors.Is(err, matchService.ErrNotYourTurn):
-			code = ErrorNotYourTurn
-			message = "not your turn"
-		}
-
-		h.sendError(client, code, message)
+	if p.ActionID == "" {
+		h.sendError(client, ErrorInvalidPayload, "match action requires actionId")
+		return
+	}
+	if len(p.ActionID) > 128 || p.RoomID == "" || p.ExpectedMatchID == "" || p.Action == "" ||
+		p.ExpectedTurnNumber < 1 || p.ExpectedPhase == "" || p.ExpectedStateVersion < 1 {
+		h.sendMatchActionResult(client, MatchActionResultPayload{
+			ActionID: p.ActionID,
+			Status:   string(model.MatchActionStatusRejected),
+			Error: &ErrorPayload{
+				Code:    ErrorInvalidPayload,
+				Message: "invalid match action payload",
+			},
+		})
+		return
+	}
+	if state.RoomID != p.RoomID {
+		// Do not acknowledge the command: on reconnect join_room and the queued
+		// action can briefly cross in flight, and the client will safely retry it.
+		h.sendError(client, ErrorForbidden, "not in room")
 		return
 	}
 
+	result, err := h.matchService.ApplyAction(ctx, matchDTO.ApplyMatchActionRequest{
+		ActionID:             p.ActionID,
+		ActorID:              state.Actor.ID,
+		RoomID:               p.RoomID,
+		ExpectedMatchID:      p.ExpectedMatchID,
+		Action:               p.Action,
+		ExpectedTurnNumber:   p.ExpectedTurnNumber,
+		ExpectedPhase:        p.ExpectedPhase,
+		ExpectedStateVersion: p.ExpectedStateVersion,
+		Payload:              marshalRawMessage(p.Payload),
+	})
+	accepted := result != nil && result.Status == string(model.MatchActionStatusAccepted)
+	if err != nil && !accepted {
+		code, message := matchActionError(err)
+		if code == ErrorInternal {
+			h.loggerFromContext(ctx).With("roomID", p.RoomID, "actionID", p.ActionID, "error", err).Warnf("apply match action failed; leaving command unacknowledged for retry")
+			return
+		}
+		payload := MatchActionResultPayload{
+			ActionID: p.ActionID,
+			Status:   string(model.MatchActionStatusRejected),
+			Error: &ErrorPayload{
+				Code:    code,
+				Message: message,
+			},
+		}
+		if result != nil {
+			payload.Status = result.Status
+			payload.StateVersion = &result.StateVersion
+			if result.ErrorCode != "" {
+				payload.Error = &ErrorPayload{
+					Code:    result.ErrorCode,
+					Message: result.ErrorMessage,
+				}
+			}
+		}
+		h.sendMatchActionResult(client, payload)
+		if result != nil && result.MatchState != nil {
+			h.sendMatchStateWithLifecycle(state, result.MatchState)
+		}
+		return
+	}
+	if result == nil {
+		h.loggerFromContext(ctx).With("roomID", p.RoomID, "actionID", p.ActionID).Warnf("match action returned no result; leaving command unacknowledged for retry")
+		return
+	}
+	if result.MatchState == nil {
+		h.loggerFromContext(ctx).With("roomID", p.RoomID, "actionID", p.ActionID, "error", err).Warnf("accepted match action returned no authoritative state; leaving command unacknowledged for retry")
+		return
+	}
+	if err != nil {
+		h.loggerFromContext(ctx).With("roomID", p.RoomID, "actionID", p.ActionID, "error", err).Warnf("match action accepted but state refresh failed")
+	}
+
+	stateVersion := result.StateVersion
+	h.sendMatchActionResult(client, MatchActionResultPayload{
+		ActionID:     p.ActionID,
+		Status:       string(model.MatchActionStatusAccepted),
+		StateVersion: &stateVersion,
+	})
+	if result.Replayed {
+		if result.MatchState != nil {
+			h.sendMatchStateWithLifecycle(state, result.MatchState)
+		}
+		return
+	}
+
+	matchState := result.MatchState
 	h.broadcastMatchState(ctx, p.RoomID, matchState)
 	if matchState.Status == string(model.MatchStatusFinished) {
-		h.turnTimers.Stop(p.RoomID)
-		h.broadcastMatchFinished(ctx, p.RoomID)
+		h.turnTimers.stopMatch(p.RoomID, matchState.ID)
+		h.broadcastKnownMatchFinished(ctx, p.RoomID, matchState)
 		return
 	}
 	h.turnTimers.Schedule(matchState)
+}
+
+func matchActionError(err error) (string, string) {
+	switch {
+	case errors.Is(err, matchService.ErrMatchNotFound):
+		return ErrorMatchNotFound, "match not found"
+	case errors.Is(err, matchService.ErrMatchNotActive):
+		return ErrorMatchNotActive, "match is not active"
+	case errors.Is(err, matchService.ErrInvalidMatchAction):
+		return ErrorInvalidMatchAction, "invalid match action"
+	case errors.Is(err, matchService.ErrNotYourTurn):
+		return ErrorNotYourTurn, "not your turn"
+	case errors.Is(err, matchService.ErrMatchStateConflict):
+		return ErrorMatchStateConflict, "match state changed"
+	case errors.Is(err, matchService.ErrActionIDConflict):
+		return ErrorActionIDConflict, "action id was already used"
+	default:
+		return ErrorInternal, "failed to apply match action"
+	}
 }
 
 func marshalRawMessage(v any) json.RawMessage {
@@ -1225,6 +1323,18 @@ func (h *MessageHandler) broadcastMatchFinished(ctx context.Context, roomID stri
 	}
 }
 
+func (h *MessageHandler) broadcastKnownMatchFinished(
+	ctx context.Context,
+	roomID string,
+	matchState *matchDTO.MatchResponse,
+) {
+	roomState, err := h.roomService.GetRoomState(ctx, roomID)
+	if err == nil {
+		h.broadcastRoomState(ctx, roomID, roomState)
+	}
+	h.broadcastMatchFinishedEvent(ctx, roomID, matchState)
+}
+
 func (h *MessageHandler) broadcastMatchFinishedEvent(ctx context.Context, roomID string, matchState *matchDTO.MatchResponse) {
 	h.broadcastMatchEvent(ctx, roomID, "match_finished", h.matchFinishedPayload(ctx, matchState))
 }
@@ -1351,6 +1461,13 @@ func (h *MessageHandler) sendError(client *centrifuge.Client, code, message stri
 			Code:    code,
 			Message: message,
 		},
+	})
+}
+
+func (h *MessageHandler) sendMatchActionResult(client *centrifuge.Client, payload MatchActionResultPayload) {
+	h.sendServerMessage(client, ServerMessage{
+		Type:    "match_action_result",
+		Payload: payload,
 	})
 }
 

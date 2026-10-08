@@ -96,6 +96,9 @@ type BoardState struct {
 }
 
 type PrivateGameState struct {
+	MatchID               string                 `json:"matchId"`
+	Version               int                    `json:"version"`
+	TurnNumber            int                    `json:"turnNumber"`
 	IsYourTurn            bool                   `json:"isYourTurn"`
 	Phase                 Phase                  `json:"phase"`
 	CurrentPlayerID       *string                `json:"currentPlayerId"`

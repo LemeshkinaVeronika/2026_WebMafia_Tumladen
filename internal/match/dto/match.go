@@ -32,10 +32,24 @@ type MatchResponse struct {
 }
 
 type ApplyMatchActionRequest struct {
-	ActorID string          `json:"actorId"`
-	RoomID  string          `json:"roomId"`
-	Action  string          `json:"action"`
-	Payload json.RawMessage `json:"payload"`
+	ActionID             string          `json:"actionId"`
+	ActorID              string          `json:"actorId"`
+	RoomID               string          `json:"roomId"`
+	ExpectedMatchID      string          `json:"expectedMatchId"`
+	Action               string          `json:"action"`
+	ExpectedTurnNumber   int             `json:"expectedTurnNumber"`
+	ExpectedPhase        string          `json:"expectedPhase"`
+	ExpectedStateVersion int             `json:"expectedStateVersion"`
+	Payload              json.RawMessage `json:"payload"`
+}
+
+type ApplyMatchActionResult struct {
+	MatchState   *MatchResponse
+	Status       string
+	StateVersion int
+	ErrorCode    string
+	ErrorMessage string
+	Replayed     bool
 }
 
 type ApplyTurnTimeoutRequest struct {

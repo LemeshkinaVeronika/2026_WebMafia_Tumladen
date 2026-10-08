@@ -427,6 +427,8 @@ func (r *Repository) TerminateActiveMatch(
 	result *model.JSONB,
 	terminatedByActorID *string,
 	terminatedAt time.Time,
+	expectedStateVersion *int,
+	actionReceipt *model.MatchActionReceipt,
 ) (*model.Match, []model.MatchPlayer, error) {
 	const op = "room.repository.postgres.TerminateActiveMatch"
 
@@ -447,10 +449,43 @@ func (r *Repository) TerminateActiveMatch(
 	if err != nil {
 		return nil, nil, fmt.Errorf("[%s]: get active match failed: %w", op, err)
 	}
+	if expectedStateVersion != nil {
+		var snapshot struct {
+			Version int `json:"version"`
+		}
+		if json.Unmarshal(match.GameState, &snapshot) != nil || snapshot.Version != *expectedStateVersion {
+			return nil, nil, fmt.Errorf("[%s]: %w", op, ErrMatchStateConflict)
+		}
+	}
 
 	players, err := r.listMatchPlayersTx(ctx, tx, match.ID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("[%s]: list match players failed: %w", op, err)
+	}
+
+	if actionReceipt != nil {
+		const insertReceiptQuery = `
+			INSERT INTO match_action_receipts (
+				room_id, match_id, actor_id, action_id, request_hash, status,
+				state_version, error_code, error_message
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, NULLIF($8, ''), NULLIF($9, ''))
+		`
+		if _, err := tx.ExecContext(
+			ctx,
+			insertReceiptQuery,
+			roomID,
+			match.ID,
+			actionReceipt.ActorID,
+			actionReceipt.ActionID,
+			actionReceipt.RequestHash,
+			actionReceipt.Status,
+			actionReceipt.StateVersion,
+			actionReceipt.ErrorCode,
+			actionReceipt.ErrorMessage,
+		); err != nil {
+			return nil, nil, fmt.Errorf("[%s]: persist action receipt failed: %w", op, err)
+		}
 	}
 
 	nextState := match.GameState

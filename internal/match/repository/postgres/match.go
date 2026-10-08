@@ -206,7 +206,7 @@ func (r *Repository) listMatchPlayers(ctx context.Context, matchID string) ([]mo
 	return players, nil
 }
 
-func (r *Repository) UpdateState(ctx context.Context, matchID string, state model.JSONB, status model.MatchStatus, result *model.JSONB) error {
+func (r *Repository) UpdateState(ctx context.Context, matchID string, expectedStateVersion int, state model.JSONB, status model.MatchStatus, result *model.JSONB) error {
 	const op = "match.repository.postgres.UpdateState"
 
 	query := `
@@ -215,10 +215,12 @@ func (r *Repository) UpdateState(ctx context.Context, matchID string, state mode
 		    status = $3,
 		    result = $4,
 		    updated_at = NOW()
-		WHERE id = $1 AND status = 'active'
+		WHERE id = $1
+		  AND status = 'active'
+		  AND (game_state->>'version')::BIGINT = $5
 	`
 
-	res, err := r.db.ExecContext(ctx, query, matchID, state, status, result)
+	res, err := r.db.ExecContext(ctx, query, matchID, state, status, result, expectedStateVersion)
 	if err != nil {
 		return fmt.Errorf("[%s]: exec failed: %w", op, err)
 	}
@@ -228,7 +230,7 @@ func (r *Repository) UpdateState(ctx context.Context, matchID string, state mode
 		return fmt.Errorf("[%s]: rows affected failed: %w", op, err)
 	}
 	if rowsAffected == 0 {
-		return ErrNotFound
+		return ErrStateConflict
 	}
 
 	return nil

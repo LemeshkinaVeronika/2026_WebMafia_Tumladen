@@ -185,7 +185,7 @@ func TestBuildPrivateStateExposesMeepleActionsAndZones(t *testing.T) {
 		t.Fatalf("marshal state: %v", err)
 	}
 
-	rawPrivate, err := engine.BuildPrivateState(&model.Match{GameState: model.JSONB(rawState)}, nil, "actor-a")
+	rawPrivate, err := engine.BuildPrivateState(&model.Match{ID: "match-1", GameState: model.JSONB(rawState)}, nil, "actor-a")
 	if err != nil {
 		t.Fatalf("BuildPrivateState() error = %v", err)
 	}
@@ -193,6 +193,15 @@ func TestBuildPrivateStateExposesMeepleActionsAndZones(t *testing.T) {
 	var privateState carcassonneDTO.PrivateGameState
 	if err := json.Unmarshal(rawPrivate, &privateState); err != nil {
 		t.Fatalf("unmarshal private state: %v", err)
+	}
+	if privateState.Version != state.Version {
+		t.Fatalf("version = %d, want %d", privateState.Version, state.Version)
+	}
+	if privateState.MatchID != "match-1" {
+		t.Fatalf("matchId = %q, want match-1", privateState.MatchID)
+	}
+	if privateState.TurnNumber != state.TurnNumber {
+		t.Fatalf("turnNumber = %d, want %d", privateState.TurnNumber, state.TurnNumber)
 	}
 
 	if len(privateState.AllowedActions) != 2 ||

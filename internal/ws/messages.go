@@ -53,6 +53,8 @@ const (
 	ErrorInvalidMatchAction = "INVALID_MATCH_ACTION"
 	ErrorMatchNotFound      = "MATCH_NOT_FOUND"
 	ErrorMatchNotActive     = "MATCH_NOT_ACTIVE"
+	ErrorMatchStateConflict = "MATCH_STATE_CONFLICT"
+	ErrorActionIDConflict   = "ACTION_ID_CONFLICT"
 	ErrorInternal           = "INTERNAL_ERROR"
 )
 
@@ -65,9 +67,21 @@ type RoomStatePayload = roomDTO.RoomResponse
 type MatchStatePayload = matchDTO.MatchResponse
 
 type MatchActionPayload struct {
-	RoomID  string `json:"roomId"`
-	Action  string `json:"action"`
-	Payload any    `json:"payload"`
+	ActionID             string `json:"actionId"`
+	RoomID               string `json:"roomId"`
+	ExpectedMatchID      string `json:"expectedMatchId"`
+	Action               string `json:"action"`
+	ExpectedTurnNumber   int    `json:"expectedTurnNumber"`
+	ExpectedPhase        string `json:"expectedPhase"`
+	ExpectedStateVersion int    `json:"expectedStateVersion"`
+	Payload              any    `json:"payload"`
+}
+
+type MatchActionResultPayload struct {
+	ActionID     string        `json:"actionId"`
+	Status       string        `json:"status"`
+	StateVersion *int          `json:"stateVersion,omitempty"`
+	Error        *ErrorPayload `json:"error,omitempty"`
 }
 
 type DeleteRoomPayload struct {

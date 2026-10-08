@@ -14,6 +14,7 @@ var (
 	ErrRoomNotReady                   = errors.New("room is not ready to start in postgres repository")
 	ErrNotEnoughPlayers               = errors.New("not enough players in postgres repository")
 	ErrActiveMatchNotFound            = errors.New("active match not found in postgres repository")
+	ErrMatchStateConflict             = errors.New("match state changed in postgres repository")
 	ErrForbiddenDeleteActiveRoom      = errors.New("cannot delete active room in postgres repository")
 )
 

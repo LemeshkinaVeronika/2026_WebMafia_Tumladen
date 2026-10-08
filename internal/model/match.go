@@ -4,6 +4,7 @@ import "time"
 
 type MatchStatus string
 type MatchTerminationReason string
+type MatchActionStatus string
 type JSONB []byte
 
 const (
@@ -18,6 +19,11 @@ const (
 	MatchTerminationReasonPlayerLeft       MatchTerminationReason = "player_left"
 	MatchTerminationReasonReconnectTimeout MatchTerminationReason = "reconnect_timeout"
 	MatchTerminationReasonRoomDeleted      MatchTerminationReason = "room_deleted"
+)
+
+const (
+	MatchActionStatusAccepted MatchActionStatus = "accepted"
+	MatchActionStatusRejected MatchActionStatus = "rejected"
 )
 
 type Match struct {
@@ -37,4 +43,19 @@ type Match struct {
 type MatchWithPlayers struct {
 	Match   Match
 	Players []MatchPlayer
+}
+
+// MatchActionReceipt is the durable result of a client-issued match command.
+// The request hash prevents an action ID from being reused for different input.
+type MatchActionReceipt struct {
+	RoomID       string
+	MatchID      string
+	ActorID      string
+	ActionID     string
+	RequestHash  string
+	Status       MatchActionStatus
+	StateVersion int
+	ErrorCode    string
+	ErrorMessage string
+	CreatedAt    time.Time
 }

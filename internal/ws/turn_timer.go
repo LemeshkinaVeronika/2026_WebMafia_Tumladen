@@ -22,9 +22,11 @@ type turnTimerManager struct {
 }
 
 type turnTimerEntry struct {
-	timer    *time.Timer
-	deadline time.Time
-	key      turnTimerKey
+	timer          *time.Timer
+	deadline       time.Time
+	key            turnTimerKey
+	version        int
+	matchCreatedAt time.Time
 }
 
 type turnTimerKey struct {
@@ -65,7 +67,7 @@ func (m *turnTimerManager) Schedule(matchState *matchDTO.MatchResponse) {
 
 	snapshot, ok := timeoutSnapshot(matchState)
 	if !ok || snapshot.Settings.TurnTimeSeconds == 0 {
-		m.Stop(matchState.RoomID)
+		m.stopMatch(matchState.RoomID, matchState.ID)
 		return
 	}
 
@@ -75,6 +77,7 @@ func (m *turnTimerManager) Schedule(matchState *matchDTO.MatchResponse) {
 		CurrentPlayerID: snapshot.CurrentPlayerID,
 	}
 	deadline := turnDeadline(turnStartedAt(matchState.UpdatedAt, snapshot), snapshot.Settings.TurnTimeSeconds)
+	matchCreatedAt, _ := time.Parse(time.RFC3339, matchState.CreatedAt)
 	req := matchDTO.ApplyTurnTimeoutRequest{
 		RoomID:               matchState.RoomID,
 		ExpectedMatchID:      matchState.ID,
@@ -86,6 +89,16 @@ func (m *turnTimerManager) Schedule(matchState *matchDTO.MatchResponse) {
 
 	m.mu.Lock()
 	if existing := m.timers[matchState.RoomID]; existing != nil {
+		if existing.key.MatchID != key.MatchID &&
+			!existing.matchCreatedAt.IsZero() &&
+			(matchCreatedAt.IsZero() || !matchCreatedAt.After(existing.matchCreatedAt)) {
+			m.mu.Unlock()
+			return
+		}
+		if existing.key.MatchID == key.MatchID && existing.version > snapshot.Version {
+			m.mu.Unlock()
+			return
+		}
 		if existing.key == key {
 			deadline = existing.deadline
 		}
@@ -96,13 +109,30 @@ func (m *turnTimerManager) Schedule(matchState *matchDTO.MatchResponse) {
 		duration = 0
 	}
 	m.timers[matchState.RoomID] = &turnTimerEntry{
-		deadline: deadline,
-		key:      key,
+		deadline:       deadline,
+		key:            key,
+		version:        snapshot.Version,
+		matchCreatedAt: matchCreatedAt,
 	}
 	m.timers[matchState.RoomID].timer = time.AfterFunc(duration, func() {
 		m.applyTimeout(req)
 	})
 	m.mu.Unlock()
+}
+
+func (m *turnTimerManager) stopMatch(roomID, matchID string) {
+	if m == nil || roomID == "" || matchID == "" {
+		return
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	entry := m.timers[roomID]
+	if entry == nil || entry.key.MatchID != matchID {
+		return
+	}
+	entry.timer.Stop()
+	delete(m.timers, roomID)
 }
 
 func (m *turnTimerManager) Stop(roomID string) {
@@ -135,6 +165,13 @@ func (m *turnTimerManager) applyTimeout(req matchDTO.ApplyTurnTimeoutRequest) {
 	ctx := context.Background()
 	matchState, err := m.service.ApplyTurnTimeout(ctx, req)
 	if err != nil {
+		if errors.Is(err, matchService.ErrMatchStateConflict) {
+			currentMatch, refreshErr := m.service.GetActiveByRoomID(ctx, req.RoomID)
+			if refreshErr == nil {
+				m.Schedule(currentMatch)
+			}
+			return
+		}
 		if errors.Is(err, matchService.ErrInvalidMatchAction) ||
 			errors.Is(err, matchService.ErrMatchNotFound) ||
 			errors.Is(err, matchService.ErrMatchNotActive) {
