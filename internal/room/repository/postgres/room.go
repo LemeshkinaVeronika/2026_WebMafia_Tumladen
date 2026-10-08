@@ -429,6 +429,7 @@ func (r *Repository) TerminateActiveMatch(
 	terminatedAt time.Time,
 	expectedStateVersion *int,
 	actionReceipt *model.MatchActionReceipt,
+	activities []model.MatchActivity,
 ) (*model.Match, []model.MatchPlayer, error) {
 	const op = "room.repository.postgres.TerminateActiveMatch"
 
@@ -486,6 +487,11 @@ func (r *Repository) TerminateActiveMatch(
 		); err != nil {
 			return nil, nil, fmt.Errorf("[%s]: persist action receipt failed: %w", op, err)
 		}
+	}
+
+	activities = activitiesForMatch(activities, match.ID)
+	if err := insertMatchActivitiesTx(ctx, tx, activities); err != nil {
+		return nil, nil, fmt.Errorf("[%s]: persist match activities failed: %w", op, err)
 	}
 
 	nextState := match.GameState

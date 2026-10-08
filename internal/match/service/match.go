@@ -11,6 +11,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/google/uuid"
 	gameService "github.com/webmafia/tumladan/internal/game/service"
 	"github.com/webmafia/tumladan/internal/match/dto"
 	matchPostgres "github.com/webmafia/tumladan/internal/match/repository/postgres"
@@ -20,7 +21,8 @@ import (
 )
 
 const (
-	maxBotTurnSteps = 32
+	maxBotTurnSteps          = 32
+	maxRecentMatchActivities = 50
 )
 
 func matchToResponse(match model.Match, players []model.MatchPlayer) dto.MatchResponse {
@@ -65,6 +67,29 @@ func matchToResponse(match model.Match, players []model.MatchPlayer) dto.MatchRe
 	return resp
 }
 
+func (s *Service) matchResponse(ctx context.Context, match model.Match, players []model.MatchPlayer) (*dto.MatchResponse, error) {
+	activities, err := s.repo.ListRecentActivities(ctx, match.ID, gameStateVersion(match.GameState), maxRecentMatchActivities)
+	if err != nil {
+		return nil, err
+	}
+
+	response := matchToResponse(match, players)
+	response.RecentActions = make([]dto.MatchActivityResponse, 0, len(activities))
+	for _, activity := range activities {
+		response.RecentActions = append(response.RecentActions, dto.MatchActivityResponse{
+			ID:           activity.ID,
+			StateVersion: activity.StateVersion,
+			TurnNumber:   activity.TurnNumber,
+			ActorID:      activity.ActorID,
+			Type:         activity.Type,
+			Payload:      json.RawMessage(activity.Payload),
+			CreatedAt:    activity.CreatedAt.Format(time.RFC3339Nano),
+		})
+	}
+
+	return &response, nil
+}
+
 func (s *Service) GetActiveByRoomID(ctx context.Context, roomID string) (*dto.MatchResponse, error) {
 	match, players, err := s.repo.GetActiveByRoomID(ctx, roomID)
 	if err != nil {
@@ -74,8 +99,7 @@ func (s *Service) GetActiveByRoomID(ctx context.Context, roomID string) (*dto.Ma
 		return nil, err
 	}
 
-	resp := matchToResponse(*match, players)
-	return &resp, nil
+	return s.matchResponse(ctx, *match, players)
 }
 
 func (s *Service) ApplyAction(ctx context.Context, req dto.ApplyMatchActionRequest) (*dto.ApplyMatchActionResult, error) {
@@ -165,7 +189,11 @@ func (s *Service) ApplyAction(ctx context.Context, req dto.ApplyMatchActionReque
 		// Always return the latest successfully persisted in-memory snapshot so
 		// the transport can broadcast it and restore the turn timer even when a
 		// following automatic bot step fails.
-		response = attachMatchEvents(ptrMatchResponse(matchToResponse(*match, players)), events)
+		response, _ = s.matchResponse(ctx, *match, players)
+		if response == nil {
+			response = ptrMatchResponse(matchToResponse(*match, players))
+		}
+		response = attachMatchEvents(response, events)
 	}
 	return &dto.ApplyMatchActionResult{
 		MatchState:   response,
@@ -231,6 +259,7 @@ func (s *Service) persistActionResult(
 	if actionReceipt != nil {
 		actionReceipt.StateVersion = stateVersion
 	}
+	activities := prepareMatchActivities(match.ID, stateVersion, actionResult.Activities)
 
 	if actionResult.NextStatus == model.MatchStatusFinished {
 		if s.terminator == nil {
@@ -246,6 +275,7 @@ func (s *Service) persistActionResult(
 			Result:               json.RawMessage(resultOrNull(actionResult.Result)),
 			ExpectedStateVersion: &expectedStateVersion,
 			ActionReceipt:        actionReceipt,
+			Activities:           activities,
 		}); err != nil {
 			if errors.Is(err, roomService.ErrMatchStateConflict) {
 				return false, 0, ErrMatchStateConflict
@@ -259,11 +289,16 @@ func (s *Service) persistActionResult(
 		return true, stateVersion, nil
 	}
 
-	if actionReceipt == nil {
-		err = s.repo.UpdateState(ctx, match.ID, stateVersion-1, actionResult.NextState, actionResult.NextStatus, actionResult.Result)
-	} else {
-		err = s.repo.UpdateStateWithActionReceipt(ctx, match.ID, stateVersion-1, actionResult.NextState, actionResult.NextStatus, actionResult.Result, actionReceipt)
-	}
+	err = s.repo.PersistActionResult(
+		ctx,
+		match.ID,
+		stateVersion-1,
+		actionResult.NextState,
+		actionResult.NextStatus,
+		actionResult.Result,
+		actionReceipt,
+		activities,
+	)
 	if err != nil {
 		if errors.Is(err, matchPostgres.ErrStateConflict) {
 			return false, 0, ErrMatchStateConflict
@@ -278,6 +313,31 @@ func (s *Service) persistActionResult(
 	match.Status = actionResult.NextStatus
 	match.Result = actionResult.Result
 	return false, stateVersion, nil
+}
+
+func prepareMatchActivities(matchID string, stateVersion int, activities []model.MatchActivity) []model.MatchActivity {
+	if len(activities) == 0 {
+		return nil
+	}
+
+	prepared := make([]model.MatchActivity, len(activities))
+	now := time.Now().UTC()
+	for i, activity := range activities {
+		activity.MatchID = matchID
+		activity.StateVersion = stateVersion
+		activity.Ordinal = i
+		if activity.ID == "" {
+			activity.ID = uuid.NewString()
+		}
+		if activity.CreatedAt.IsZero() {
+			activity.CreatedAt = now
+		}
+		if len(activity.Payload) == 0 {
+			activity.Payload = model.JSONB(`{}`)
+		}
+		prepared[i] = activity
+	}
+	return prepared
 }
 
 func (s *Service) applyAutomaticBotTurns(
@@ -429,8 +489,7 @@ func (s *Service) matchStateForReceiptReplay(
 	if err == nil {
 		for _, player := range players {
 			if player.ActorID == receipt.ActorID {
-				response := matchToResponse(*match, players)
-				return &response, nil
+				return s.matchResponse(ctx, *match, players)
 			}
 		}
 		return s.matchStateByID(ctx, receipt.MatchID)
@@ -473,8 +532,12 @@ func (s *Service) rejectMatchAction(
 		return nil, err
 	}
 
+	response, err := s.matchResponse(ctx, *match, players)
+	if err != nil {
+		return nil, err
+	}
 	return &dto.ApplyMatchActionResult{
-		MatchState:   ptrMatchResponse(matchToResponse(*match, players)),
+		MatchState:   response,
 		Status:       string(model.MatchActionStatusRejected),
 		StateVersion: receipt.StateVersion,
 		ErrorCode:    receipt.ErrorCode,
@@ -490,8 +553,7 @@ func (s *Service) matchStateByID(ctx context.Context, matchID string) (*dto.Matc
 		}
 		return nil, err
 	}
-	response := matchToResponse(*match, players)
-	return &response, nil
+	return s.matchResponse(ctx, *match, players)
 }
 
 func ptrMatchResponse(response dto.MatchResponse) *dto.MatchResponse {
@@ -650,8 +712,7 @@ func (s *Service) GetLastByRoomID(ctx context.Context, roomID string) (*dto.Matc
 		return nil, err
 	}
 
-	resp := matchToResponse(*match, players)
-	return &resp, nil
+	return s.matchResponse(ctx, *match, players)
 }
 
 func mapGameMatchError(err error) error {

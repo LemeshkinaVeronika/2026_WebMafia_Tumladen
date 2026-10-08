@@ -74,6 +74,20 @@ func TestApplyActionRunsFullTurnContract(t *testing.T) {
 	if got, want := len(afterPlace.Board), 2; got != want {
 		t.Fatalf("board size after place tile = %d, want %d", got, want)
 	}
+	if got, want := len(placeResult.Activities), 1; got != want {
+		t.Fatalf("tile activities = %d, want %d", got, want)
+	}
+	if activity := placeResult.Activities[0]; activity.Type != carcassonneDTO.ActivityTypeTilePlaced || activity.ActorID != "actor-a" || activity.TurnNumber != 1 {
+		t.Fatalf("tile activity = %#v, want actor-a tile_placed on turn 1", activity)
+	} else {
+		var activityPayload carcassonneDTO.TilePlacedActivityPayload
+		if err := json.Unmarshal(activity.Payload, &activityPayload); err != nil {
+			t.Fatalf("unmarshal tile activity payload: %v", err)
+		}
+		if activityPayload.TileID != "city_cap" || activityPayload.TileInstanceID != "drawn-tile" || activityPayload.X != placement.X || activityPayload.Y != placement.Y || activityPayload.Rotation != rotation {
+			t.Fatalf("tile activity payload = %#v, want placed tile", activityPayload)
+		}
+	}
 
 	match.GameState = placeResult.NextState
 	privateAfterPlace := privateStateForActor(t, engine, match, players, "actor-a")
@@ -226,6 +240,20 @@ func TestApplyActionStoresMeepleFeatureType(t *testing.T) {
 	if got, want := after.Meeples[0].Segment, carcassonneDTO.SegmentCenter; got != want {
 		t.Fatalf("meeple segment = %s, want %s", got, want)
 	}
+	if got, want := len(result.Activities), 1; got != want {
+		t.Fatalf("meeple activities = %d, want %d", got, want)
+	}
+	if activity := result.Activities[0]; activity.Type != carcassonneDTO.ActivityTypeMeeplePlaced || activity.ActorID != "actor-a" || activity.TurnNumber != 1 {
+		t.Fatalf("meeple activity = %#v, want actor-a meeple_placed on turn 1", activity)
+	} else {
+		var activityPayload carcassonneDTO.MeeplePlacedActivityPayload
+		if err := json.Unmarshal(activity.Payload, &activityPayload); err != nil {
+			t.Fatalf("unmarshal meeple activity payload: %v", err)
+		}
+		if activityPayload.TileID != "road_straight" || activityPayload.TileInstanceID != "drawn-tile" || activityPayload.ZoneID != "road_1" || activityPayload.FeatureType != carcassonneDTO.ZoneTypeRoad {
+			t.Fatalf("meeple activity payload = %#v, want placed road meeple", activityPayload)
+		}
+	}
 }
 
 func TestApplyActionRejectsMeepleSegmentMismatch(t *testing.T) {
@@ -368,6 +396,9 @@ func TestApplyTurnTimeoutPlacesFirstValidTileAndSkipsMeeple(t *testing.T) {
 	}
 	if len(after.Meeples) != 0 {
 		t.Fatalf("meeples after timeout = %d, want 0", len(after.Meeples))
+	}
+	if got, want := len(result.Activities), 1; got != want || result.Activities[0].Type != carcassonneDTO.ActivityTypeTilePlaced {
+		t.Fatalf("timeout activities = %#v, want one tile_placed activity", result.Activities)
 	}
 }
 

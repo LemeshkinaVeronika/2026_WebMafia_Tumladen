@@ -251,6 +251,52 @@ func (r *Repository) terminateMatchTx(
 	return nil
 }
 
+func insertMatchActivitiesTx(ctx context.Context, tx *sql.Tx, activities []model.MatchActivity) error {
+	const query = `
+		INSERT INTO match_activities (
+			id, match_id, state_version, ordinal, turn_number, actor_id, type, payload, created_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`
+
+	for _, activity := range activities {
+		payload := activity.Payload
+		if len(payload) == 0 {
+			payload = model.JSONB(`{}`)
+		}
+		if _, err := tx.ExecContext(
+			ctx,
+			query,
+			activity.ID,
+			activity.MatchID,
+			activity.StateVersion,
+			activity.Ordinal,
+			activity.TurnNumber,
+			activity.ActorID,
+			activity.Type,
+			payload,
+			activity.CreatedAt,
+		); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func activitiesForMatch(activities []model.MatchActivity, matchID string) []model.MatchActivity {
+	if len(activities) == 0 {
+		return nil
+	}
+
+	stamped := make([]model.MatchActivity, len(activities))
+	for i, activity := range activities {
+		activity.MatchID = matchID
+		stamped[i] = activity
+	}
+	return stamped
+}
+
 func (r *Repository) updateRoomStatusTx(ctx context.Context, tx *sql.Tx, roomID string, status model.RoomStatus) (time.Time, error) {
 	query := `
 		UPDATE rooms

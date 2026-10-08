@@ -18,6 +18,17 @@ func TestTerminateActiveMatchCommitsReceiptStateOutboxAndRoomTogether(t *testing
 	defer db.Close()
 
 	fixture := terminalActionFixture()
+	activity := model.MatchActivity{
+		ID:           "00000000-0000-0000-0000-000000000003",
+		MatchID:      "untrusted-match-id",
+		StateVersion: fixture.receipt.StateVersion,
+		Ordinal:      0,
+		TurnNumber:   1,
+		ActorID:      fixture.actorID,
+		Type:         "tile_placed",
+		Payload:      model.JSONB(`{"tileId":"city_cap"}`),
+		CreatedAt:    fixture.terminatedAt,
+	}
 	expectTerminalActionLoad(mock, fixture)
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO match_action_receipts")).
 		WithArgs(
@@ -30,6 +41,19 @@ func TestTerminateActiveMatchCommitsReceiptStateOutboxAndRoomTogether(t *testing
 			fixture.receipt.StateVersion,
 			fixture.receipt.ErrorCode,
 			fixture.receipt.ErrorMessage,
+		).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO match_activities")).
+		WithArgs(
+			activity.ID,
+			fixture.matchID,
+			activity.StateVersion,
+			activity.Ordinal,
+			activity.TurnNumber,
+			activity.ActorID,
+			activity.Type,
+			activity.Payload,
+			activity.CreatedAt,
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(regexp.QuoteMeta("UPDATE matches")).WillReturnResult(sqlmock.NewResult(0, 1))
@@ -50,6 +74,7 @@ func TestTerminateActiveMatchCommitsReceiptStateOutboxAndRoomTogether(t *testing
 		fixture.terminatedAt,
 		&fixture.expectedVersion,
 		fixture.receipt,
+		[]model.MatchActivity{activity},
 	)
 	if err != nil {
 		t.Fatalf("TerminateActiveMatch() error = %v", err)
@@ -86,6 +111,7 @@ func TestTerminateActiveMatchRollsBackEverythingWhenReceiptInsertFails(t *testin
 		fixture.terminatedAt,
 		&fixture.expectedVersion,
 		fixture.receipt,
+		nil,
 	)
 	if !errors.Is(err, insertErr) {
 		t.Fatalf("TerminateActiveMatch() error = %v, want receipt insert error", err)
@@ -120,6 +146,7 @@ func TestTerminateActiveMatchRejectsStaleVersionBeforeWriting(t *testing.T) {
 		fixture.terminatedAt,
 		&fixture.expectedVersion,
 		fixture.receipt,
+		nil,
 	)
 	if !errors.Is(err, ErrMatchStateConflict) {
 		t.Fatalf("TerminateActiveMatch() error = %v, want ErrMatchStateConflict", err)

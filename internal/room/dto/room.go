@@ -98,6 +98,7 @@ type FinishRoomMatchRequest struct {
 	Result               json.RawMessage           `json:"result,omitempty"`
 	ExpectedStateVersion *int                      `json:"-"`
 	ActionReceipt        *model.MatchActionReceipt `json:"-"`
+	Activities           []model.MatchActivity     `json:"-"`
 }
 
 type DeleteRoomRequest struct {

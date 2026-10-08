@@ -64,20 +64,21 @@ type MessageHandler struct {
 }
 
 type PublicMatchState struct {
-	ID                  string                         `json:"id"`
-	RoomID              string                         `json:"roomId"`
-	GameType            string                         `json:"gameType"`
-	Status              string                         `json:"status"`
-	ServerTime          string                         `json:"serverTime"`
-	GameState           json.RawMessage                `json:"gameState"`
-	Result              json.RawMessage                `json:"result,omitempty"`
-	TerminationReason   *string                        `json:"terminationReason,omitempty"`
-	TerminatedByActorID *string                        `json:"terminatedByActorId,omitempty"`
-	TerminatedAt        *string                        `json:"terminatedAt,omitempty"`
-	Players             []matchDTO.MatchPlayerResponse `json:"players"`
-	CreatedAt           string                         `json:"createdAt"`
-	UpdatedAt           string                         `json:"updatedAt"`
-	Events              []gameService.GameEvent        `json:"events,omitempty"`
+	ID                  string                           `json:"id"`
+	RoomID              string                           `json:"roomId"`
+	GameType            string                           `json:"gameType"`
+	Status              string                           `json:"status"`
+	ServerTime          string                           `json:"serverTime"`
+	GameState           json.RawMessage                  `json:"gameState"`
+	Result              json.RawMessage                  `json:"result,omitempty"`
+	TerminationReason   *string                          `json:"terminationReason,omitempty"`
+	TerminatedByActorID *string                          `json:"terminatedByActorId,omitempty"`
+	TerminatedAt        *string                          `json:"terminatedAt,omitempty"`
+	Players             []matchDTO.MatchPlayerResponse   `json:"players"`
+	CreatedAt           string                           `json:"createdAt"`
+	UpdatedAt           string                           `json:"updatedAt"`
+	Events              []gameService.GameEvent          `json:"events,omitempty"`
+	RecentActions       []matchDTO.MatchActivityResponse `json:"recentActions"`
 }
 
 type PrivateMatchState struct {
@@ -1295,6 +1296,7 @@ func (h *MessageHandler) publicMatchStatePayload(ctx context.Context, matchState
 		CreatedAt:           matchState.CreatedAt,
 		UpdatedAt:           matchState.UpdatedAt,
 		Events:              matchState.Events,
+		RecentActions:       matchState.RecentActions,
 	}
 }
 

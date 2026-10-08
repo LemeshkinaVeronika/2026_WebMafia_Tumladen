@@ -26,3 +26,25 @@ const (
 	ActionPlaceMeeple Action = "place_meeple"
 	ActionSkipMeeple  Action = "skip_meeple"
 )
+
+const (
+	ActivityTypeTilePlaced   = "tile_placed"
+	ActivityTypeMeeplePlaced = "meeple_placed"
+)
+
+type TilePlacedActivityPayload struct {
+	TileID         string `json:"tileId"`
+	TileInstanceID string `json:"tileInstanceId"`
+	X              int    `json:"x"`
+	Y              int    `json:"y"`
+	Rotation       int    `json:"rotation"`
+}
+
+type MeeplePlacedActivityPayload struct {
+	TileID         string      `json:"tileId"`
+	TileInstanceID string      `json:"tileInstanceId"`
+	ZoneID         string      `json:"zoneId"`
+	FeatureType    ZoneType    `json:"featureType"`
+	Segment        ZoneSegment `json:"segment"`
+	MeepleType     MeepleType  `json:"meepleType"`
+}

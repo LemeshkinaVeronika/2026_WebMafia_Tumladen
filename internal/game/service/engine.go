@@ -41,6 +41,7 @@ type ApplyActionResult struct {
 	NextStatus model.MatchStatus
 	Result     *model.JSONB
 	Events     []GameEvent
+	Activities []model.MatchActivity
 }
 
 // GameEvent describes a transient domain event produced while applying an

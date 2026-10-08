@@ -13,10 +13,10 @@ type IRepository interface {
 	GetByID(ctx context.Context, matchID string) (*model.Match, []model.MatchPlayer, error)
 	GetActiveByRoomID(ctx context.Context, roomID string) (*model.Match, []model.MatchPlayer, error)
 	GetLastByRoomID(ctx context.Context, roomID string) (*model.Match, []model.MatchPlayer, error)
+	ListRecentActivities(ctx context.Context, matchID string, maxStateVersion, limit int) ([]model.MatchActivity, error)
 	GetActionReceipt(ctx context.Context, roomID, actorID, actionID string) (*model.MatchActionReceipt, error)
 	SaveActionReceipt(ctx context.Context, receipt *model.MatchActionReceipt) error
-	UpdateState(ctx context.Context, matchID string, expectedStateVersion int, state model.JSONB, status model.MatchStatus, result *model.JSONB) error
-	UpdateStateWithActionReceipt(ctx context.Context, matchID string, expectedStateVersion int, state model.JSONB, status model.MatchStatus, result *model.JSONB, receipt *model.MatchActionReceipt) error
+	PersistActionResult(ctx context.Context, matchID string, expectedStateVersion int, state model.JSONB, status model.MatchStatus, result *model.JSONB, receipt *model.MatchActionReceipt, activities []model.MatchActivity) error
 }
 
 type MatchTerminator interface {

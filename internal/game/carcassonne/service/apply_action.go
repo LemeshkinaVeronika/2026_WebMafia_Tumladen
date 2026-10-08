@@ -7,6 +7,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/google/uuid"
 	carcassonneDTO "github.com/webmafia/tumladan/internal/game/carcassonne/dto"
 	gameService "github.com/webmafia/tumladan/internal/game/service"
 	"github.com/webmafia/tumladan/internal/model"
@@ -79,14 +80,20 @@ func (e *Engine) ApplyTurnTimeout(ctx context.Context, match *model.Match, playe
 		if err != nil {
 			return gameService.ApplyActionResult{}, err
 		}
-		if _, err := e.placeTile(match, &state, gameService.ApplyActionRequest{
+		tileResult, err := e.placeTile(match, &state, gameService.ApplyActionRequest{
 			ActorID: state.CurrentPlayerID,
 			Action:  string(carcassonneDTO.ActionPlaceTile),
 			Payload: payload,
-		}); err != nil {
+		})
+		if err != nil {
 			return gameService.ApplyActionResult{}, err
 		}
-		return e.resolveTurn(&state)
+		result, err := e.resolveTurn(&state)
+		if err != nil {
+			return gameService.ApplyActionResult{}, err
+		}
+		result.Activities = append(tileResult.Activities, result.Activities...)
+		return result, nil
 	case carcassonneDTO.PhasePlaceMeeple:
 		payload, err := marshalActionPayload(carcassonneDTO.SkipMeeplePayload{
 			RoomID: match.RoomID,
@@ -138,7 +145,27 @@ func (e *Engine) placeTile(match *model.Match, state *carcassonneDTO.GameState, 
 	state.CurrentTile = nil
 	state.Phase = carcassonneDTO.PhasePlaceMeeple
 
-	return marshalActionResult(*state, model.MatchStatusActive, nil)
+	result, err := marshalActionResult(*state, model.MatchStatusActive, nil)
+	if err != nil {
+		return gameService.ApplyActionResult{}, err
+	}
+	activity, err := newMatchActivity(
+		req.ActorID,
+		state.TurnNumber,
+		carcassonneDTO.ActivityTypeTilePlaced,
+		carcassonneDTO.TilePlacedActivityPayload{
+			TileID:         placedTile.TileID,
+			TileInstanceID: placedTile.InstanceID,
+			X:              placedTile.X,
+			Y:              placedTile.Y,
+			Rotation:       placedTile.Rotation,
+		},
+	)
+	if err != nil {
+		return gameService.ApplyActionResult{}, err
+	}
+	result.Activities = []model.MatchActivity{activity}
+	return result, nil
 }
 
 type autoTilePlacement struct {
@@ -175,6 +202,22 @@ func marshalActionPayload(payload any) (json.RawMessage, error) {
 	return data, nil
 }
 
+func newMatchActivity(actorID string, turnNumber int, activityType string, payload any) (model.MatchActivity, error) {
+	rawPayload, err := json.Marshal(payload)
+	if err != nil {
+		return model.MatchActivity{}, err
+	}
+
+	return model.MatchActivity{
+		ID:         uuid.NewString(),
+		TurnNumber: turnNumber,
+		ActorID:    actorID,
+		Type:       activityType,
+		Payload:    model.JSONB(rawPayload),
+		CreatedAt:  time.Now().UTC(),
+	}, nil
+}
+
 func (e *Engine) placeMeeple(match *model.Match, state *carcassonneDTO.GameState, req gameService.ApplyActionRequest) (gameService.ApplyActionResult, error) {
 	if state.Phase != carcassonneDTO.PhasePlaceMeeple || state.LastPlacedTile == nil {
 		return gameService.ApplyActionResult{}, gameService.ErrInvalidMatchAction
@@ -209,17 +252,41 @@ func (e *Engine) placeMeeple(match *model.Match, state *carcassonneDTO.GameState
 		return gameService.ApplyActionResult{}, gameService.ErrInvalidMatchAction
 	}
 
-	state.Meeples = append(state.Meeples, carcassonneDTO.PlacedMeeple{
+	placedMeeple := carcassonneDTO.PlacedMeeple{
 		TileInstanceID: state.LastPlacedTile.InstanceID,
 		ZoneID:         payload.ZoneID,
 		ActorID:        req.ActorID,
 		MeepleType:     meepleType,
 		FeatureType:    zone.Type,
 		Segment:        segment,
-	})
+	}
+	tileID := state.LastPlacedTile.TileID
+	turnNumber := state.TurnNumber
+	state.Meeples = append(state.Meeples, placedMeeple)
 	decrementMeeple(state.Players, req.ActorID, meepleType)
 
-	return e.resolveTurn(state)
+	result, err := e.resolveTurn(state)
+	if err != nil {
+		return gameService.ApplyActionResult{}, err
+	}
+	activity, err := newMatchActivity(
+		req.ActorID,
+		turnNumber,
+		carcassonneDTO.ActivityTypeMeeplePlaced,
+		carcassonneDTO.MeeplePlacedActivityPayload{
+			TileID:         tileID,
+			TileInstanceID: placedMeeple.TileInstanceID,
+			ZoneID:         placedMeeple.ZoneID,
+			FeatureType:    placedMeeple.FeatureType,
+			Segment:        placedMeeple.Segment,
+			MeepleType:     placedMeeple.MeepleType,
+		},
+	)
+	if err != nil {
+		return gameService.ApplyActionResult{}, err
+	}
+	result.Activities = append([]model.MatchActivity{activity}, result.Activities...)
+	return result, nil
 }
 
 func (e *Engine) skipMeeple(match *model.Match, state *carcassonneDTO.GameState, req gameService.ApplyActionRequest) (gameService.ApplyActionResult, error) {

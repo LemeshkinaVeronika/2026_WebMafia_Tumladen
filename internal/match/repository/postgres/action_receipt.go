@@ -104,6 +104,63 @@ func (r *Repository) UpdateStateWithActionReceipt(
 	return nil
 }
 
+func (r *Repository) PersistActionResult(
+	ctx context.Context,
+	matchID string,
+	expectedStateVersion int,
+	state model.JSONB,
+	status model.MatchStatus,
+	result *model.JSONB,
+	receipt *model.MatchActionReceipt,
+	activities []model.MatchActivity,
+) error {
+	const op = "match.repository.postgres.PersistActionResult"
+
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("[%s]: begin tx failed: %w", op, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if receipt != nil {
+		if err := insertActionReceipt(ctx, tx, receipt); err != nil {
+			return fmt.Errorf("[%s]: insert receipt failed: %w", op, mapActionReceiptError(err))
+		}
+	}
+
+	const updateQuery = `
+		UPDATE matches
+		SET game_state = $2,
+		    status = $3,
+		    result = $4,
+		    updated_at = NOW()
+		WHERE id = $1
+		  AND status = 'active'
+		  AND (game_state->>'version')::BIGINT = $5
+	`
+	res, err := tx.ExecContext(ctx, updateQuery, matchID, state, status, result, expectedStateVersion)
+	if err != nil {
+		return fmt.Errorf("[%s]: update match failed: %w", op, err)
+	}
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("[%s]: rows affected failed: %w", op, err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("[%s]: update match failed: %w", op, ErrStateConflict)
+	}
+
+	activities = activitiesForMatch(activities, matchID)
+	if err := insertMatchActivities(ctx, tx, activities); err != nil {
+		return fmt.Errorf("[%s]: insert activities failed: %w", op, err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("[%s]: commit failed: %w", op, err)
+	}
+	return nil
+}
+
 type receiptExecer interface {
 	ExecContext(context.Context, string, ...any) (sql.Result, error)
 }

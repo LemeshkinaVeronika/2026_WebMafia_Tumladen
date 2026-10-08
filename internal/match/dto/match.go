@@ -14,6 +14,16 @@ type MatchPlayerResponse struct {
 	IsDisconnected bool   `json:"isDisconnected"`
 }
 
+type MatchActivityResponse struct {
+	ID           string          `json:"id"`
+	StateVersion int             `json:"stateVersion"`
+	TurnNumber   int             `json:"turnNumber"`
+	ActorID      string          `json:"actorId"`
+	Type         string          `json:"type"`
+	Payload      json.RawMessage `json:"payload"`
+	CreatedAt    string          `json:"createdAt"`
+}
+
 type MatchResponse struct {
 	ID                  string                  `json:"id"`
 	RoomID              string                  `json:"roomId"`
@@ -29,6 +39,7 @@ type MatchResponse struct {
 	CreatedAt           string                  `json:"createdAt"`
 	UpdatedAt           string                  `json:"updatedAt"`
 	Events              []gameService.GameEvent `json:"events,omitempty"`
+	RecentActions       []MatchActivityResponse `json:"recentActions"`
 }
 
 type ApplyMatchActionRequest struct {

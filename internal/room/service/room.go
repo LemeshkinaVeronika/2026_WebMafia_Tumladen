@@ -432,7 +432,7 @@ func (s *Service) FinishRoomMatch(ctx context.Context, req dto.FinishRoomMatchRe
 
 	terminatedAt := time.Now().UTC()
 
-	_, _, err = s.repo.TerminateActiveMatch(ctx, req.RoomID, gameState, reason, result, req.ActorID, terminatedAt, req.ExpectedStateVersion, req.ActionReceipt)
+	_, _, err = s.repo.TerminateActiveMatch(ctx, req.RoomID, gameState, reason, result, req.ActorID, terminatedAt, req.ExpectedStateVersion, req.ActionReceipt, req.Activities)
 	if err != nil {
 		switch {
 		case errors.Is(err, roomPostgres.ErrNotFound):

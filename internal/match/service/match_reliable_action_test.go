@@ -40,6 +40,9 @@ func TestApplyActionPersistsOnceAndReplaysAcceptedReceipt(t *testing.T) {
 	if engine.applyCalls != 1 || repo.updateWithReceiptCalls != 1 {
 		t.Fatalf("after first action engine calls = %d, atomic updates = %d; want 1, 1", engine.applyCalls, repo.updateWithReceiptCalls)
 	}
+	if repo.listActivitiesVersion != 2 {
+		t.Fatalf("activity snapshot version = %d, want 2", repo.listActivitiesVersion)
+	}
 
 	second, err := service.ApplyAction(t.Context(), req)
 	if err != nil {
@@ -323,6 +326,9 @@ func TestPersistActionResultIncrementsVersionAndAttachesTerminalReceipt(t *testi
 	finished, version, err := service.persistActionResult(t.Context(), match.RoomID, "actor-1", match, gameService.ApplyActionResult{
 		NextState:  model.JSONB(`{"version":77,"phase":"finished","turnNumber":5}`),
 		NextStatus: model.MatchStatusFinished,
+		Activities: []model.MatchActivity{
+			{ActorID: "actor-1", TurnNumber: 5, Type: "meeple_placed", Payload: model.JSONB(`{}`)},
+		},
 	}, receipt)
 	if err != nil {
 		t.Fatalf("persistActionResult() error = %v", err)
@@ -338,6 +344,13 @@ func TestPersistActionResultIncrementsVersionAndAttachesTerminalReceipt(t *testi
 	}
 	if got := gameStateVersion(terminator.request.GameState); got != 10 {
 		t.Fatalf("terminal game state version = %d, want 10", got)
+	}
+	if got, want := len(terminator.request.Activities), 1; got != want {
+		t.Fatalf("terminal activities = %d, want %d", got, want)
+	}
+	activity := terminator.request.Activities[0]
+	if activity.ID == "" || activity.MatchID != match.ID || activity.StateVersion != 10 || activity.Ordinal != 0 || activity.CreatedAt.IsZero() {
+		t.Fatalf("terminal activity = %#v, want stamped match/version/ordinal/id/time", activity)
 	}
 }
 
@@ -376,6 +389,8 @@ type reliableActionRepo struct {
 	saveReceiptCalls       int
 	updateCalls            int
 	updateWithReceiptCalls int
+	activities             []model.MatchActivity
+	listActivitiesVersion  int
 }
 
 func (r *reliableActionRepo) Create(context.Context, *model.Match, []model.MatchPlayer) error {
@@ -406,6 +421,20 @@ func (r *reliableActionRepo) GetLastByRoomID(_ context.Context, roomID string) (
 		return nil, nil, matchPostgres.ErrNotFound
 	}
 	return r.match, r.players, nil
+}
+
+func (r *reliableActionRepo) ListRecentActivities(_ context.Context, matchID string, maxStateVersion, limit int) ([]model.MatchActivity, error) {
+	r.listActivitiesVersion = maxStateVersion
+	result := make([]model.MatchActivity, 0, len(r.activities))
+	for _, activity := range r.activities {
+		if activity.MatchID == matchID && activity.StateVersion <= maxStateVersion {
+			result = append(result, activity)
+		}
+	}
+	if len(result) > limit {
+		result = result[:limit]
+	}
+	return result, nil
 }
 
 func (r *reliableActionRepo) GetActionReceipt(_ context.Context, roomID, actorID, actionID string) (*model.MatchActionReceipt, error) {
@@ -441,6 +470,26 @@ func (r *reliableActionRepo) UpdateStateWithActionReceipt(_ context.Context, mat
 	}
 	copy := *receipt
 	r.receipt = &copy
+	return nil
+}
+
+func (r *reliableActionRepo) PersistActionResult(_ context.Context, matchID string, _ int, state model.JSONB, status model.MatchStatus, result *model.JSONB, receipt *model.MatchActionReceipt, activities []model.MatchActivity) error {
+	if receipt == nil {
+		r.updateCalls++
+	} else {
+		r.updateWithReceiptCalls++
+		if r.receipt != nil {
+			return matchPostgres.ErrActionAlreadySaved
+		}
+	}
+	if err := r.updateMatch(matchID, state, status, result); err != nil {
+		return err
+	}
+	if receipt != nil {
+		copy := *receipt
+		r.receipt = &copy
+	}
+	r.activities = append(r.activities, activities...)
 	return nil
 }
 
